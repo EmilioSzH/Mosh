@@ -18,6 +18,7 @@ import {
 } from "./producePrompt";
 import type { ProduceTemplate } from "./produceTemplate";
 import { runAgentLoop, type ChatMessage } from "./loop";
+import { chordTonesForRoot, pcName, scaleForms, tonicPc } from "./produceCheck";
 import type { Snapshot } from "../../types";
 
 const SNAP = {
@@ -266,5 +267,67 @@ describe("lesson-tag provenance (docs/produce-corrections/README.md's workflow)"
       expect(noteIndex, `lesson tag note ${noteStr} out of range for ${id}`).toBeGreaterThanOrEqual(0);
       expect(noteIndex).toBeLessThan((meta.notes as unknown[]).length);
     }
+  });
+});
+
+// ── round 4: the sounding-root table ─────────────────────────────────────────
+// The failure it targets is RECALL, not rule-comprehension: the 808 lands at step 2 and
+// the arp at step 8, and 22-47% of round-2's melodic notes clashed with the root. These
+// pin that the table only appears once there is something to report, that its tones come
+// from the same theory the checker judges by, and that a run without an 808 clip is
+// byte-identical to v3.
+describe("sounding-root table (round 4)", () => {
+  const template = {
+    bpm: 148,
+    key: { tonic: "D", mode: "minor" },
+    seed: 3,
+    drums: { trackId: "1010", pads: [] },
+    bass: { trackId: "1015", keyNote: 62, sample: "808.wav" },
+    synths: [{ trackId: "1020", role: "lead", preset: "p", file: "f" }],
+    mix: {},
+    constants: { eightBarsSeconds: (32 * 60) / 148 },
+  } as unknown as Parameters<typeof buildProduceSystemPrompt>[3];
+
+  const snapWith = (notes: unknown[] | null) => ({
+    tracks: [{ id: "1015", name: "808", clips: notes ? [{ id: "c1", notes }] : [] }],
+  }) as unknown as Parameters<typeof buildProduceSystemPrompt>[0];
+
+  it("says nothing until the 808 clip exists (v3-identical prompt)", () => {
+    const before = buildProduceSystemPrompt(snapWith(null), "produce", undefined, template);
+    expect(before).not.toContain("SOUNDING 808 ROOTS");
+  });
+
+  it("renders each 808 note as a span with its legal chord tones", () => {
+    const p = buildProduceSystemPrompt(
+      snapWith([{ i: 0, pitch: 62, start: 0, length: 2.5, velocity: 100 }]),
+      "produce", undefined, template);
+    expect(p).toContain("SOUNDING 808 ROOTS");
+    const row = p.split("\n").find((l) => l.includes("beats 0-2.5: root D (62)"));
+    expect(row, "the span for the 808 note is missing").toBeTruthy();
+    // D minor, root D -> the diatonic triad+7th is D F A C. Membership, not order:
+    // the table lists tones by pitch class, so they read "C D F A" — a spelling detail
+    // the model does not care about and this test should not pin.
+    for (const tone of ["D", "F", "A", "C"]) expect(row).toContain(tone);
+  });
+
+  it("advises exactly the tones produceCheck judges by (one theory, not two)", () => {
+    const tonic = tonicPc("D");
+    const forms = scaleForms("minor");
+    const expected = [...chordTonesForRoot(69 % 12, tonic, forms)].sort((a, b) => a - b).map(pcName);
+    const p = buildProduceSystemPrompt(
+      snapWith([{ i: 0, pitch: 69, start: 4, length: 2, velocity: 100 }]),
+      "produce", undefined, template);
+    const row = p.split("\n").find((l) => l.includes("root A (69)"));
+    expect(row).toBeTruthy();
+    for (const tone of expected) expect(row).toContain(tone);
+  });
+
+  it("orders spans by beat so the table reads as a timeline", () => {
+    const p = buildProduceSystemPrompt(
+      snapWith([
+        { i: 1, pitch: 65, start: 8, length: 2, velocity: 100 },
+        { i: 0, pitch: 62, start: 0, length: 2, velocity: 100 },
+      ]), "produce", undefined, template);
+    expect(p.indexOf("beats 0-2:")).toBeLessThan(p.indexOf("beats 8-10:"));
   });
 });
