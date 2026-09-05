@@ -15445,6 +15445,23 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
         check (mt.isNotEmpty() && mwc.isNotEmpty() && eqIx >= 0 && mmc.isNotEmpty()
                && dc.isNotEmpty() && mbus >= 0 && st.isNotEmpty() && ok (stSend), "matrix fixture built");
 
+        // Step-1 slice 5 repair (verifier finding, minor) — set_send_level must refuse a
+        // non-finite level the way add_send/set_send_pan refuse a non-finite pan. A JSON
+        // literal cannot spell NaN, but a string arg can ("nan" → juce readDoubleValue →
+        // quiet_NaN), and jlimit passes NaN straight through (every comparison is false)
+        // into the parameter's atomic value AND its tree property. Refused means: ok:false,
+        // and the canonical snapshot is byte-identical (nothing reached the engine). The
+        // restoring set below keeps a RED build (no guard) from carrying NaN into the rows.
+        {
+            const auto s0  = canon();
+            const auto nan = cmd (ops, "set_send_level", objN ({ { "trackId", st }, { "bus", mbus }, { "db", "nan" } }));
+            check (! ok (nan), "set_send_level refuses a non-finite db");
+            check (nan.getProperty ("error", var()).toString().contains ("finite"),
+                   "...and the refusal names the finite requirement");
+            check (canon() == s0, "a refused non-finite set_send_level mutates nothing (canonical snapshot equal)");
+            cmd (ops, "set_send_level", objN ({ { "trackId", st }, { "bus", mbus }, { "db", -6.0 } }));
+        }
+
         Array<var> rippleTracks; rippleTracks.add (var (mt));
         struct MatrixCase { String name; var args; };
         const MatrixCase table[] = {
