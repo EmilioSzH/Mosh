@@ -10,8 +10,15 @@
 // just relocated here; `studioSkills.ts` keeps its own copy until Slice B's Task 7
 // retires it as a routing path (this module does not delete that file).
 //
-// Bounded catalog cap is TIGHTENED to 64 (was 4096 in the legacy skill) per this task's
-// instruction; the per-field length cap (1024 UTF-16 code units) is unchanged.
+// Bounded catalog cap: 4096 (step-1 brief, slice 2, 2026-09-05). Slice B Task 5 had
+// tightened it to 64, and the owner machine's `list_plugins` result has 1,198 entries —
+// every "add a …" ask was blocked as "invalid or oversized data" before it could fall
+// through to the router (MOSHI-EDIT-PROBE-2026-09-04 seq 286). There is no engine
+// paging (`cmdListPlugins` takes no arguments), so this UI constant is the only bound;
+// the per-field length cap (1024 UTF-16 code units) is unchanged. In the same slice,
+// an add/insert/put ask with NO catalog match answers `unsupported` (the runtime's
+// own no-match shape) so AgentComposer proceeds to the router; "load X" with no match
+// keeps `missing_target` — a producer who says "load" means a plug-in.
 
 import type { AvailablePlugin, Snapshot } from "../../../types";
 import { addPluginRecent, installedEntry, resolvePluginMatch, type PluginEntry } from "../../../ui/pluginBrowserUtil";
@@ -37,11 +44,13 @@ import type {
   StudioSkillEnvironmentV1,
 } from "../contracts";
 
-const MAX_PLUGIN_CATALOG_V1 = 64;
+const MAX_PLUGIN_CATALOG_V1 = 4_096;
 const MAX_PLUGIN_FIELD_LENGTH_V1 = 1_024;
 
+type PluginVerbV1 = "load" | "add" | "insert" | "put";
+
 const LOAD_PLUGIN_UTTERANCE_V1 =
-  /^(?:(?:can|could|would|will)\s+you\s+|please\s+|hey\s+moshi[, ]+)*(?:load|add|insert|put)\s+(?:(?:the|a)\s+)?(?:plugin\s+)?(.+?)(?:\s+(?:on|onto)\s+(?:the\s+)?(?:selected|current|this)\s+track)?[?!.]*$/i;
+  /^(?:(?:can|could|would|will)\s+you\s+|please\s+|hey\s+moshi[, ]+)*(load|add|insert|put)\s+(?:(?:the|a)\s+)?(?:plugin\s+)?(.+?)(?:\s+(?:on|onto)\s+(?:the\s+)?(?:selected|current|this)\s+track)?[?!.]*$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -72,16 +81,21 @@ export function parsePluginCatalogV1(data: unknown): readonly PluginEntry[] | nu
   return entries;
 }
 
-export function pluginQueryV1(utterance: string): string | null {
+function parsePluginUtteranceV1(utterance: string): { readonly verb: PluginVerbV1; readonly query: string } | null {
   const match = utterance.trim().match(LOAD_PLUGIN_UTTERANCE_V1);
-  const query = match?.[1]?.trim();
+  const verb = match?.[1]?.toLowerCase() as PluginVerbV1 | undefined;
+  const query = match?.[2]?.trim();
   // "add" is shared producer language. Do not claim obvious timeline/MIDI
   // creation asks and then fail while reading the installed plug-in catalog.
   // Actual plug-in names containing these words remain available through the
   // explicit "load plugin <name>" form.
   if (query && /\b(?:test\s+tone|midi\s+clip|audio\s+clip|clip|notes?)\b/i.test(query)
     && !/\bplugin\b/i.test(utterance)) return null;
-  return query ? query : null;
+  return verb && query ? { verb, query } : null;
+}
+
+export function pluginQueryV1(utterance: string): string | null {
+  return parsePluginUtteranceV1(utterance)?.query ?? null;
 }
 
 type PluginChoiceV1 = { readonly label: string; readonly entry: PluginEntry };
@@ -358,11 +372,11 @@ export const loadNamedPluginV1: NativeSkillHandlerV1 = async ({ payload, environ
   // Certified matchers may prefill a broad `pluginName` slot for any leading
   // "add" request. Revalidate the original utterance before trusting that slot,
   // otherwise clip/note creation is stolen before the producer brain can see it.
-  const utteranceQuery = pluginQueryV1(utterance);
-  if (!utteranceQuery) return blocked(payload, "unsupported_intent", payload.responses.blocked);
+  const parsed = parsePluginUtteranceV1(utterance);
+  if (!parsed) return blocked(payload, "unsupported_intent", payload.responses.blocked);
   const query = typeof slots.pluginName === "string" && slots.pluginName.length > 0
     ? slots.pluginName
-    : utteranceQuery;
+    : parsed.query;
 
   const initial = environment.context();
   if (!initial.selectedTrackId) return blocked(payload, "missing_target", "Select the track you want me to load it on.");
@@ -385,6 +399,12 @@ export const loadNamedPluginV1: NativeSkillHandlerV1 = async ({ payload, environ
 
   const match = resolvePluginMatch(observed.value, query);
   if (match.kind === "none") {
+    // Step-1 brief, slice 2: "add/insert/put <X>" with nothing in the catalog called X
+    // is most likely not a plug-in ask at all ("add a counter phrase"). Answer with the
+    // runtime's own no-match shape — the ONE outcome AgentComposer's finishSkillOutcome
+    // declines to handle — so the turn proceeds to the router instead of ending as
+    // studio_skill_blocked. Nothing was mutated (reads only, no transaction opened).
+    if (parsed.verb !== "load") return { kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." };
     return blocked(payload, "missing_target", `I couldn't find ${query} — open Plug-in Manager or rescan, then try again.`);
   }
   if (match.kind === "ambiguous") {

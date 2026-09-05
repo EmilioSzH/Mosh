@@ -194,11 +194,17 @@ describe("pluginQueryV1 / parsePluginCatalogV1", () => {
     expect(pluginQueryV1("add four notes to this clip")).toBeNull();
   });
 
-  it("rejects a catalog over the 64-entry cap", () => {
-    const oversized = { plugins: Array.from({ length: 65 }, (_, i) => plugin({ id: `p${i}` })) };
+  // Step-1 brief, slice 2: the cap was 64, and the owner machine's list_plugins result
+  // has 1,198 entries — every "add a …" ask was blocked as "invalid or oversized data"
+  // before it could fall through to the router. There is no engine paging
+  // (cmdListPlugins takes no arguments), so the UI constant is the only bound.
+  it("accepts a real-machine 1,198-entry catalog and enforces the 4096-entry cap boundary", () => {
+    const realMachine = { plugins: Array.from({ length: 1_198 }, (_, i) => plugin({ id: `p${i}`, name: `Plugin ${i}` })) };
+    expect(parsePluginCatalogV1(realMachine)).toHaveLength(1_198);
+    const exact = { plugins: Array.from({ length: 4_096 }, (_, i) => plugin({ id: `p${i}` })) };
+    expect(parsePluginCatalogV1(exact)).toHaveLength(4_096);
+    const oversized = { plugins: Array.from({ length: 4_097 }, (_, i) => plugin({ id: `p${i}` })) };
     expect(parsePluginCatalogV1(oversized)).toBeNull();
-    const exact = { plugins: Array.from({ length: 64 }, (_, i) => plugin({ id: `p${i}` })) };
-    expect(parsePluginCatalogV1(exact)).not.toBeNull();
   });
 
   it("rejects an overlong field (>1024 UTF-16 code units)", () => {
@@ -263,6 +269,53 @@ describe("loadNamedPluginV1 — exact resolution", () => {
     engine.failLoadOnce = true;
     await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Serum 2", slots: {} });
     expect(engine.tracks[0]!.plugins ?? []).toHaveLength(0);
+  });
+});
+
+// Step-1 brief, slice 2 — "add" is shared producer language. When the verb is
+// add/insert/put and the catalog has NO match, the handler must answer `unsupported`
+// (the runtime's own no-match shape) so AgentComposer proceeds to the router instead of
+// ending the turn as studio_skill_blocked. "load X" with no match keeps missing_target:
+// a producer who says "load" means a plug-in.
+describe("loadNamedPluginV1 — add/insert/put with no catalog match falls through", () => {
+  const realMachineCatalog = (): FakePlugin[] =>
+    Array.from({ length: 1_198 }, (_, i) => plugin({ id: `p${i}`, name: `Plugin ${i}`, manufacturer: `Vendor ${i % 37}` }));
+
+  it("\"add a counter phrase\" against a 1,198-entry catalog is unsupported, not blocked, with zero mutation", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], "track-1", realMachineCatalog());
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "add a counter phrase", slots: {},
+    });
+    expect(outcome).toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    expect(engine.batchBeginCalls).toHaveLength(0);
+  });
+
+  it("\"insert …\" and \"put …\" with no match are unsupported too", async () => {
+    for (const utterance of ["insert a riser before the drop", "put a little swing on the hats"]) {
+      const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], "track-1", realMachineCatalog());
+      const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance, slots: {} });
+      expect(outcome.kind, utterance).toBe("unsupported");
+      expect(engine.batchBeginCalls).toHaveLength(0);
+    }
+  });
+
+  it("\"add <installed plug-in>\" still loads it — the fall-through is only for a missing match", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], "track-1", [...realMachineCatalog(), plugin({ id: "ott", name: "OTT", isInstrument: false })]);
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "add OTT", slots: {},
+    });
+    expect(outcome).toMatchObject({ kind: "completed" });
+    expect(engine.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["ott"]);
+  });
+
+  it("\"load Nonexistent\" against the same 1,198-entry catalog keeps missing_target", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], "track-1", realMachineCatalog());
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Nonexistent", slots: {},
+    });
+    expect(outcome).toMatchObject({ kind: "blocked", code: "missing_target" });
+    expect(outcome.kind === "blocked" && outcome.say).toMatch(/rescan/i);
+    expect(engine.batchBeginCalls).toHaveLength(0);
   });
 });
 
