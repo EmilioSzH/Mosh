@@ -1170,6 +1170,16 @@ private:
     juce::File        txnLedgerFile;
     juce::int64       editRevision_ = 0;   // bumped by beginTxn / cmdUndo / cmdRedo
     int               execDepth_    = 0;   // the guard governs the OUTERMOST execute only
+    // Step-1 slice 6 — provenance stamped on every JSONL line (ADDITIVE fields; a reader
+    // treats absence as unknown). currentOrigin_ is owned by the OUTERMOST execute(): the
+    // envelope's non-empty "origin" sibling, else "ui" when the call came through
+    // executeFromUi, else "native"; a re-entered execute inherits it, and a recovery
+    // replay logs as "recovery" (replayingRecovery_). batchTurnId_ is batch_begin's
+    // args.turn_id, stamped as a top-level sibling from the batch_begin line through the
+    // batch_end / batch_rollback line inclusive, so a reader never opens args for it.
+    juce::String      currentOrigin_;
+    bool              dispatchFromUi_ = false;
+    juce::String      batchTurnId_;
     bool              projectEpochManagedByUi_ = false;
     // Set by txnPreDispatch when it admits a manifested command, consumed by
     // txnPostDispatch to record that command's outcome against its manifest entry.
