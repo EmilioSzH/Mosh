@@ -1,0 +1,88 @@
+# runb — run-script: 16 command(s), 0 failure(s) — commit 0da6c638 — 2026-09-05
+# script:
+{"command":"create_track","args":{"name":"Vocal"},"capture":{"V":"trackId"}}
+{"command":"add_test_tone_clip","args":{"trackId":"${V}","seconds":4.0,"freq":220.0}}
+{"command":"create_bus","args":{"name":"Reverb"},"capture":{"B":"busNumber","BT":"trackId"}}
+{"command":"load_builtin","args":{"trackId":"${BT}","type":"reverb"}}
+{"command":"add_send","args":{"trackId":"${V}","bus":"${B}","db":-12}}
+{"command":"set_track_volume","args":{"trackId":"${V}","db":-10}}
+{"command":"__snapshot","args":{"label":"base"}}
+{"command":"export_audio","args":{"file":"base.wav","format":"wav","bitDepth":32,"range":"full","tail":"cut"}}
+{"command":"batch_begin","args":{"name":"S1","turn_id":"probe-1","source":"probe","utterance":"lower the vocal 3 dB"}}
+{"command":"set_track_volume","args":{"trackId":"${V}","db":-13}}
+{"command":"batch_end","args":{}}
+{"command":"__snapshot","args":{"label":"after_fader"}}
+{"command":"set_send_level","args":{"trackId":"${V}","bus":"${B}","db":-18}}
+{"command":"__snapshot","args":{"label":"after_send"}}
+{"command":"undo","args":{}}
+{"command":"__snapshot","args":{"label":"undo_send_immediate"}}
+{"command":"__wait","args":{"ms":300}}
+{"command":"__snapshot","args":{"label":"undo_send_pumped"}}
+{"command":"undo","args":{}}
+{"command":"__snapshot","args":{"label":"undo_fader"}}
+{"command":"export_audio","args":{"file":"undo.wav","format":"wav","bitDepth":32,"range":"full","tail":"cut"}}
+{"command":"save_as","args":{"file":"step1.mosh"}}
+{"command":"open_project","args":{"file":"step1.mosh"}}
+{"command":"__snapshot","args":{"label":"reopened"}}
+# parsed result lines:
+create_track: ok=True err= data={"trackId": "1010", "type": "audio", "isInstrument": false, "muteGateIndex": 0}
+import_clip: ok=True err= data={"clipId": "1014", "trackId": "1010", "file": "/Users/emiliosanchez-harris/Library/Mosh/_harness/pivot-step1/imports/tone-220.wav"}
+create_bus: ok=True err= data={"busNumber": 0, "trackId": "1015", "name": "Reverb", "mpBusId": "2b21060b46354ee7afcaa44646c6bd33"}
+load_builtin: ok=True err= data={"index": 4, "name": "Reverb", "type": "reverb", "isInstrument": false}
+add_send: ok=True err= data={"bus": 0}
+set_track_volume: ok=True err= data=
+[snapshot base] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[{'bus': 0, 'db': -12.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1015 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn', 'reverb']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1015'}]
+export_audio: ok=True err= data={"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/
+batch_begin: ok=True err= data=
+set_track_volume: ok=True err= data=
+batch_end: ok=True err= data=
+[snapshot after_fader] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -12.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1015 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn', 'reverb']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1015'}]
+set_send_level: ok=True err= data=
+[snapshot after_send] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -18.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1015 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn', 'reverb']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1015'}]
+undo: ok=True err= data=true
+[snapshot undo_send_immediate] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -18.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1015 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn', 'reverb']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1015'}]
+[snapshot undo_send_pumped] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -18.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1015 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn', 'reverb']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1015'}]
+undo: ok=True err= data=true
+[snapshot undo_fader] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -18.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1015 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn', 'reverb']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1015'}]
+export_audio: ok=True err= data={"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/
+save_as: ok=True err= data={"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/
+open_project: ok=True err= data={"editFile": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratch
+[snapshot reopened] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -12.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1015 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn', 'reverb']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1015'}]
+# txn stamps:
+1 create_track undoable 14e43470:1
+2 import_clip undoable 14e43470:2
+3 create_bus undoable 14e43470:3
+4 load_builtin undoable 14e43470:4
+5 add_send undoable 14e43470:5
+6 set_track_volume undoable 14e43470:6
+7 export_audio - 14e43470:6
+8 batch_begin - 14e43470:6
+9 set_track_volume undoable 14e43470:7
+10 batch_end - 14e43470:7
+11 set_send_level undoable 14e43470:8
+12 undo - 14e43470:7
+13 undo - 14e43470:9
+14 export_audio - 14e43470:9
+15 save_as - 14e43470:11
+16 open_project - 14e43470:0

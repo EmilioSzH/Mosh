@@ -1,0 +1,47 @@
+# Song A (greg) package build — 2026-09-05, Mosh commit 0da6c638, headless --run-script, MOSH_NO_AUDIO=1
+# Sources: ~/Desktop/fall26/songA/*.wav (7 files, 92.6896875 s, 48 kHz, 32f stereo) copied to ~/Library/Mosh/references/songs/greg/source/ (never committed)
+
+## Run 1 — full build with original names: 18 commands, 1 failure
+export_audio -> ok=false 'export render stalled (a clip's audio source could not be read)' (after save_as; project and 7 audio copies were fine, hashes equal)
+
+## Variants (each a fresh harness session; export custom 0-10 s then full):
+vA  Beat+Lead+REF-rough, no save            -> STALL / STALL (40 s)
+vB  open_project greg.mosh                  -> STALL / STALL (40 s)
+vC  Lead + rough as 44.1 kHz afconvert copies -> OK / OK (2 s)
+vE  Lead rewritten by afconvert at 48 kHz    -> OK / OK (2 s; explicit sampleRate 48000 also OK)
+vF  original 'greg lead.wav': normalize_clip peakDb -7.70, detect_clip_bpm {73.5, 0.09}, export_clip_consolidated OK, export 0-3 s OK
+per-file (import one file, export 0-10 s + full):
+   greg 4-Sampling Gregorian chants_Millibro_145BPM_SNIPPET_FIXED.wav -> STALL/STALL
+   greg A-Reverb.wav, greg B-Delay.wav, greg background.wav, greg double.wav, greg lead.wav, greg.wav -> OK/OK
+beat file under other names (same bytes):
+   beat.wav                 -> OK   snapshot clip len 92.6896875 autoTempo=false
+   greg chants 145BPM.wav   -> STALL snapshot clip len 112.00004 autoTempo=true (stretched 145 -> session tempo)
+   beat-rewritten.wav (afconvert 48k) -> OK
+set_clip_warp {autoTempo:false} after importing the original name -> export OK, but clip length stays 112.00004
+
+## Final build (import/beat.wav renamed copy): 20 commands, 0 failures, 4 s
+{"command": "set_master_volume", "args": {"db": 0}}
+{"command": "create_track", "args": {"name": "Beat"}, "capture": {"T0": "trackId"}}
+{"command": "import_clip", "args": {"file": "~/Library/Mosh/references/songs/greg/import/beat.wav", "trackId": "${T0}", "name": "beat", "startSeconds": 0}}
+{"command": "create_track", "args": {"name": "Lead"}, "capture": {"T1": "trackId"}}
+{"command": "import_clip", "args": {"file": "~/Library/Mosh/references/songs/greg/source/greg lead.wav", "trackId": "${T1}", "name": "lead", "startSeconds": 0}}
+{"command": "create_track", "args": {"name": "Double"}, "capture": {"T2": "trackId"}}
+{"command": "import_clip", "args": {"file": "~/Library/Mosh/references/songs/greg/source/greg double.wav", "trackId": "${T2}", "name": "double", "startSeconds": 0}}
+{"command": "create_track", "args": {"name": "Background"}, "capture": {"T3": "trackId"}}
+{"command": "import_clip", "args": {"file": "~/Library/Mosh/references/songs/greg/source/greg background.wav", "trackId": "${T3}", "name": "background", "startSeconds": 0}}
+{"command": "create_track", "args": {"name": "FX A-Reverb"}, "capture": {"T4": "trackId"}}
+{"command": "import_clip", "args": {"file": "~/Library/Mosh/references/songs/greg/source/greg A-Reverb.wav", "trackId": "${T4}", "name": "A-Reverb (printed)", "startSeconds": 0}}
+{"command": "create_track", "args": {"name": "FX B-Delay"}, "capture": {"T5": "trackId"}}
+{"command": "import_clip", "args": {"file": "~/Library/Mosh/references/songs/greg/source/greg B-Delay.wav", "trackId": "${T5}", "name": "B-Delay (printed)", "startSeconds": 0}}
+{"command": "create_track", "args": {"name": "REF-rough"}, "capture": {"T6": "trackId"}}
+{"command": "import_clip", "args": {"file": "~/Library/Mosh/references/songs/greg/source/greg.wav", "trackId": "${T6}", "name": "REF rough (master chain)", "startSeconds": 0}}
+{"command": "set_track_mute", "args": {"trackId": "${T6}", "mute": true}}
+{"command": "__snapshot", "args": {"label": "built"}}
+{"command": "export_audio", "args": {"file": "<scratch>/songA-final/baseline-mosh-mix.wav", "format": "wav", "bitDepth": 32, "sampleRate": 48000, "range": "full", "tail": "cut"}}
+{"command": "save_as", "args": {"file": "~/Library/Mosh/references/songs/greg/mosh/greg.mosh"}}
+{"command": "open_project", "args": {"file": "~/Library/Mosh/references/songs/greg/mosh/greg.mosh"}}
+{"command": "__snapshot", "args": {"label": "reopened"}}
+{"command": "export_audio", "args": {"file": "<scratch>/songA-final/baseline-after-reopen.wav", "format": "wav", "bitDepth": 32, "sampleRate": 48000, "range": "full", "tail": "cut"}}
+# result: 7 tracks, all clips 92.6896875 s autoTempo=false, master 0 dB, REF-rough muted; save_as + open_project OK
+# baseline-mosh-mix.wav == baseline-after-reopen.wav (data sha 9edc865261df): peak -0.98 dBFS rms -16.29 dBFS
+# greg.wav (rough with master chain): peak -1.46 dBFS rms -16.22 dBFS

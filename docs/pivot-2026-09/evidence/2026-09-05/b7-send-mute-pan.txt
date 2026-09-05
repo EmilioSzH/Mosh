@@ -1,0 +1,62 @@
+# b7-send-mute-pan — run-script: 10 command(s), 0 failure(s) — commit 0da6c638 — 2026-09-05
+# script:
+{"command":"create_track","args":{"name":"Vocal"},"capture":{"V":"trackId"}}
+{"command":"create_bus","args":{"name":"Reverb"},"capture":{"B":"busNumber","BT":"trackId"}}
+{"command":"add_send","args":{"trackId":"${V}","bus":"${B}","db":-12}}
+{"command":"set_track_volume","args":{"trackId":"${V}","db":-10}}
+{"command":"__snapshot","args":{"label":"base"}}
+{"command":"set_send_mute","args":{"trackId":"${V}","bus":"${B}","mute":true}}
+{"command":"__snapshot","args":{"label":"after_mute"}}
+{"command":"undo","args":{}}
+{"command":"__wait","args":{"ms":200}}
+{"command":"__snapshot","args":{"label":"undo_mute"}}
+{"command":"set_track_volume","args":{"trackId":"${V}","db":-13}}
+{"command":"set_send_pan","args":{"trackId":"${V}","bus":"${B}","pan":0.5}}
+{"command":"undo","args":{}}
+{"command":"__wait","args":{"ms":200}}
+{"command":"__snapshot","args":{"label":"undo_pan"}}
+{"command":"undo","args":{}}
+{"command":"__wait","args":{"ms":200}}
+{"command":"__snapshot","args":{"label":"undo_pan_then_fader"}}
+# parsed result lines:
+create_track: ok=True err= data={"trackId": "1010", "type": "audio", "isInstrument": false, "muteGateIndex": 0}
+create_bus: ok=True err= data={"busNumber": 0, "trackId": "1013", "name": "Reverb", "mpBusId": "ad59471683e14af69e8dcb420ca905fa"}
+add_send: ok=True err= data={"bus": 0}
+set_track_volume: ok=True err= data=
+[snapshot base] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[{'bus': 0, 'db': -12.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+set_send_mute: ok=True err= data=
+[snapshot after_mute] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[{'bus': 0, 'db': -12.0, 'mute': True, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+undo: ok=True err= data=true
+[snapshot undo_mute] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[{'bus': 0, 'db': -12.0, 'mute': True, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+set_track_volume: ok=True err= data=
+set_send_pan: ok=True err= data=
+undo: ok=True err= data=true
+[snapshot undo_pan] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -12.0, 'mute': True, 'pan': 0.5, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+undo: ok=True err= data=true
+[snapshot undo_pan_then_fader] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[{'bus': 0, 'db': -12.0, 'mute': True, 'pan': 0.5, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+# txn stamps:
+1 create_track undoable bd2931c4:1
+2 create_bus undoable bd2931c4:2
+3 add_send undoable bd2931c4:3
+4 set_track_volume undoable bd2931c4:4
+5 set_send_mute undoable bd2931c4:5
+6 undo - bd2931c4:4
+7 set_track_volume undoable bd2931c4:7
+8 set_send_pan undoable bd2931c4:8
+9 undo - bd2931c4:7
+10 undo - bd2931c4:6

@@ -66,3 +66,10 @@ gated on a proxy score. To promote note *N* of correction *id*:
 A rule with no `// lesson:` tag is a MECHANICAL rule (a command shape, a budget, a
 JSON contract) — those cite their design fact instead (a `plan`/file:line comment),
 never a made-up taste preference. Taste rules come from correction rounds only.
+
+## Parked 2026-09-07
+
+The produce lane is parked at round 4 (prompt v4) with an unresolved causal diagnosis, per
+[docs/CONTRACT-AMENDMENT-2026-09-07.md](../CONTRACT-AMENDMENT-2026-09-07.md) §3. Its round count is
+not reset and not inherited. New recording/mixing experiments file rows in this same store with a
+`notes` line `experiment: <name> round <n>` and `lane: mix|record` (audit §3.2).

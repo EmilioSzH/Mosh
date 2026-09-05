@@ -15,6 +15,15 @@ re-platforming without postmortem + cooling period + owner sign-off; one genre
 at a time), and the approved produce-lane direction. That contract governs all
 future work in this repo.
 
+**Pivot 2026-09-07 (owner-approved 2026-09-04; amendment pending signature):** Moshi is
+Mosh's recording and mixing engineer first. Governing documents:
+[docs/CONTRACT-AMENDMENT-2026-09-07.md](docs/CONTRACT-AMENDMENT-2026-09-07.md) (amendment and
+supersession record), [docs/pivot-2026-09/CAPABILITY-AUDIT-2026-09-05.md](docs/pivot-2026-09/CAPABILITY-AUDIT-2026-09-05.md)
+(current-commit audit and label census), [docs/pivot-2026-09/PLAN-90-DAY-2026-09-07.md](docs/pivot-2026-09/PLAN-90-DAY-2026-09-07.md)
+and the single first implementation brief
+[docs/pivot-2026-09/BRIEF-STEP1-USEFUL-EDITS-EXACTLY-ONCE.md](docs/pivot-2026-09/BRIEF-STEP1-USEFUL-EDITS-EXACTLY-ONCE.md).
+The produce lane is parked at round 4; the weekly flywheel-lab obligation is superseded.
+
 Read [ARCHITECTURE.md](ARCHITECTURE.md) for the code map,
 [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) for the selected/archived
 disposition, and [docs/FEATURE_AUDIT.md](docs/FEATURE_AUDIT.md) for the

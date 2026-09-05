@@ -1,0 +1,8 @@
+# WAV data-chunk hashes and lag analysis (fixture runs), commit 0da6c638
+runc/fixture.wav: fmt=3 ch=2 sr=44100 bits=32 frames=88200 data_sha256=f6527f8b8548ba27 file_sha256=c79908d43237c06b
+runc/out.wav: fmt=3 ch=2 sr=44100 bits=32 frames=88200 data_sha256=8a436880a313793c file_sha256=c9c3cf8aa5a0034b
+runc2/fixture.wav: fmt=3 ch=2 sr=44100 bits=32 frames=88200 data_sha256=a7c3c3955dbab6fd file_sha256=75dfa6dc1920e7e6
+runc2/out-before-save.wav: fmt=3 ch=2 sr=44100 bits=32 frames=88200 data_sha256=8d3168b235abaf94 file_sha256=2188bf94b93016e2
+runc2/out.wav: fmt=3 ch=2 sr=44100 bits=32 frames=88200 data_sha256=8d3168b235abaf94 file_sha256=2188bf94b93016e2
+runc2/fixture-project/audio/fixture.wav: fmt=3 ch=2 sr=44100 bits=32 frames=88200 data_sha256=a7c3c3955dbab6fd file_sha256=75dfa6dc1920e7e6
+# lag scan (runc2 fixture vs out, left channel): diff_rms 1.104e-02 @lag0, 5.523e-03 @+1, 0.000e+00 @+2, 5.523e-03 @+3; peak ratio +0.000 dB

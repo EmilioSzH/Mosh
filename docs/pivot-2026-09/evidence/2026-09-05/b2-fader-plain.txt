@@ -1,0 +1,33 @@
+# b2-fader-plain — run-script: 4 command(s), 0 failure(s) — commit 0da6c638 — 2026-09-05
+# script:
+{"command":"create_track","args":{"name":"Vocal"},"capture":{"V":"trackId"}}
+{"command":"set_track_volume","args":{"trackId":"${V}","db":-10}}
+{"command":"__snapshot","args":{"label":"base"}}
+{"command":"set_track_volume","args":{"trackId":"${V}","db":-13}}
+{"command":"__snapshot","args":{"label":"after"}}
+{"command":"undo","args":{}}
+{"command":"__snapshot","args":{"label":"undo_immediate"}}
+{"command":"__wait","args":{"ms":300}}
+{"command":"__snapshot","args":{"label":"undo_pumped"}}
+# parsed result lines:
+create_track: ok=True err= data={"trackId": "1010", "type": "audio", "isInstrument": false, "muteGateIndex": 0}
+set_track_volume: ok=True err= data=
+[snapshot base] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[] plugins=[]
+   buses=[]
+set_track_volume: ok=True err= data=
+[snapshot after] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[] plugins=[]
+   buses=[]
+undo: ok=True err= data=true
+[snapshot undo_immediate] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[] plugins=[]
+   buses=[]
+[snapshot undo_pumped] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[] plugins=[]
+   buses=[]
+# txn stamps:
+1 create_track undoable 9516a41e:1
+2 set_track_volume undoable 9516a41e:2
+3 set_track_volume undoable 9516a41e:3
+4 undo - 9516a41e:2
