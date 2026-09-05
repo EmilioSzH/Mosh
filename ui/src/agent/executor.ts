@@ -4,7 +4,7 @@
 // curated catalog before it reaches the command seam; invalid calls are recorded
 // as failures and never sent.
 
-import { useStore } from "../store";
+import { useStore, type State } from "../store";
 import { validateCommand, describeCommand } from "./commands";
 import { screenByCommand, MAX_DESTRUCTIVE_PER_BATCH, DESTRUCTIVE_BLOCK_REASON } from "./destructiveScreen";
 import { MEMORY_COMMANDS, handleRememberPreference } from "./memory/rememberPreference";
@@ -75,10 +75,23 @@ function turnMarkerArgs(label: string, meta: TurnMeta): Record<string, unknown> 
   const args: Record<string, unknown> = {
     name: label,
     turn_id: newTurnId(),
-    source: meta.source ?? "brain_chat",
+    source: turnOrigin(meta),
   };
   if (meta.utterance) args.utterance = meta.utterance;
   return args;
+}
+
+// Step-1 slice 6 — the turn's provenance ALSO rides the command envelope as `origin`
+// (store.exec's fourth argument), the same value the marker's `source` carries, so
+// MoshOps stamps it on every JSONL line of the turn rather than only inside
+// batch_begin's args. One value, two carriers; never two different strings.
+const turnOrigin = (meta: TurnMeta): string => meta.source ?? "brain_chat";
+
+type ExecWithOrigin = (command: string, args?: Record<string, unknown>) => ReturnType<State["exec"]>;
+
+function execFor(meta: TurnMeta): ExecWithOrigin {
+  const origin = turnOrigin(meta);
+  return (command, args) => useStore.getState().exec(command, args, undefined, origin);
 }
 
 // FS-B2a (H3) — record an ask that produced NO commands: the brain planned nothing,
@@ -90,7 +103,7 @@ function turnMarkerArgs(label: string, meta: TurnMeta): Record<string, unknown> 
 // sets a flag; no ActionSet exists until a perform(), so an empty pair adds nothing
 // to the undo stack. Best-effort — a marker failure must never surface to the user.
 export async function logAgentTurn(label: string, meta: TurnMeta): Promise<void> {
-  const { exec } = useStore.getState();
+  const exec = execFor(meta);
   try {
     const begin = await exec("batch_begin", turnMarkerArgs(label, meta));
     if (!begin.ok) return;
@@ -120,7 +133,8 @@ export async function runAgentBatch(
   calls: readonly AgentCommandCall[],
   meta: TurnMeta = {},
 ): Promise<ChangeSet> {
-  const { exec, refresh } = useStore.getState();
+  const exec = execFor(meta);
+  const { refresh } = useStore.getState();
   const entries: ChangeEntry[] = [];
   const valid: IndexedCommandCall[] = [];
 

@@ -262,7 +262,8 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
     it("matchTrackOp keeps handling bulk multi-name mute — above skill routing (owner resolution)", async () => {
       await send("mute everything but the drums");
       expect(runtimeSpy.calls).toEqual([]);
-      expect(exec).toHaveBeenCalledWith("set_track_mute", { trackId: "2", mute: true });
+      // Step-1 slice 6 — the fastpath batch names its lane on the envelope.
+      expect(exec).toHaveBeenCalledWith("set_track_mute", { trackId: "2", mute: true }, undefined, "fastpath");
     });
   });
 
@@ -270,7 +271,8 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
     it("session-control: 'start playback' (not a fastPath alias) reaches the runtime", async () => {
       await send("start playback");
       expect(runtimeSpy.calls).toEqual([{ utterance: "start playback", token: undefined }]);
-      expect(exec).toHaveBeenCalledWith("set_transport", { action: "play" }, undefined);
+      // Step-1 slice 6 — the skill environment's exec names its lane on the envelope.
+      expect(exec).toHaveBeenCalledWith("set_transport", { action: "play" }, undefined, "studio_skill");
       expect(say()).toBe("Playing.");
     });
 
@@ -290,7 +292,7 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
     it("load-named-plugin: 'could you load ott' reaches the runtime", async () => {
       await send("could you load ott");
       expect(runtimeSpy.calls).toEqual([{ utterance: "could you load ott", token: undefined }]);
-      expect(exec).toHaveBeenCalledWith("list_plugins", {}, undefined);
+      expect(exec).toHaveBeenCalledWith("list_plugins", {}, undefined, "studio_skill");
     });
   });
 
@@ -310,7 +312,7 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
       expect(runtimeSpy.calls).toHaveLength(2);
       const secondCall = runtimeSpy.calls[1];
       expect(typeof secondCall?.token).toBe("string");
-      expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "1", pluginId: "serum-vst3" }, expect.any(Object));
+      expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "1", pluginId: "serum-vst3" }, expect.any(Object), "studio_skill");
     });
 
     it("a continuation resume takes precedence over a new section-rework/fast-path match", async () => {

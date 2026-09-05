@@ -139,10 +139,16 @@ export type State = {
   // BESIDE command/args (never inside args) all the way to MoshOps::executeImpl, which
   // reads it off the command object; WebBridge passes args[0] whole, so the sibling field
   // survives untouched. Omitted by every existing caller ⇒ behaviour unchanged.
+  // Step-1 slice 6 — the optional fourth argument is the command's provenance. Like
+  // `transaction` it rides BESIDE command/args as an `origin` sibling, which
+  // MoshOps::execute reads at its outermost call and stamps on every JSONL line the
+  // command writes. Omitted by every GUI caller ⇒ no key on the envelope, and the
+  // engine stamps "ui" itself (absent, never an empty string).
   exec: (
     command: string,
     args?: Record<string, unknown>,
     transaction?: { transactionId: string; requestId: string; index: number },
+    origin?: string,
   ) => Promise<CommandResult>;
   // AGT-MEM (M3) — satisfies menuActions.ts's ActionStore.invalidateMemory: drops
   // the cached agent-memory pools so a project switch never leaks a stale project's
@@ -469,7 +475,7 @@ export const useStore = create<State>((set, get, api) => ({
     await refreshSnapshot(get, set, projectEpoch, false);
   },
 
-  exec: async (command, args = {}, transaction) => {
+  exec: async (command, args = {}, transaction, origin) => {
     const replacesProject = ["new_project", "open_project", "open_recent", "reload", "recover_session", "open_without_plugins"].includes(command);
     let transitionEpoch: number | undefined;
     if (replacesProject) {
@@ -491,6 +497,7 @@ export const useStore = create<State>((set, get, api) => ({
         command,
         args,
         ...(transaction ? { transaction } : {}),
+        ...(origin ? { origin } : {}),
         ...(replacesProject ? { _moshProjectEpochPrepared: true } : {}),
       });
     } catch (error) {

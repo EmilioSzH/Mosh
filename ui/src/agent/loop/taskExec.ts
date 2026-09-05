@@ -32,7 +32,9 @@ export type TaskMeta = { utterance?: string; source?: string };
 
 type ExecResult = { ok: boolean; error?: string; data?: unknown };
 export type TaskExecDeps = {
-  exec?: (command: string, args?: Record<string, unknown>) => Promise<ExecResult>;
+  /** Step-1 slice 6 — the third argument is the task's provenance (`meta.source`,
+   *  default "agent_loop"), forwarded as the `origin` sibling on every envelope. */
+  exec?: (command: string, args?: Record<string, unknown>, origin?: string) => Promise<ExecResult>;
   refresh?: () => Promise<void>;
   /** The task's abort signal — a settle-wait cancels pending renders on abort. */
   signal?: { aborted: boolean };
@@ -117,7 +119,13 @@ export type TaskExecutor = {
 };
 
 export function createTaskExecutor(label: string, meta: TaskMeta = {}, deps: TaskExecDeps = {}): TaskExecutor {
-  const exec = deps.exec ?? ((c: string, a?: Record<string, unknown>) => useStore.getState().exec(c, a));
+  const seam = deps.exec
+    ?? ((c: string, a?: Record<string, unknown>, o?: string) => useStore.getState().exec(c, a, undefined, o));
+  // Step-1 slice 6 — ONE provenance value for the whole task: the same `source` the
+  // batch_begin marker carries in its args (below) also rides every envelope of the
+  // task as `origin`, so MoshOps stamps it on each JSONL line beside the turn_id.
+  const origin = meta.source ?? "agent_loop";
+  const exec = (c: string, a?: Record<string, unknown>) => seam(c, a, origin);
   const refresh = deps.refresh ?? (() => useStore.getState().refresh());
   let opened = false;
   let closed = false;

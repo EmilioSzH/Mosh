@@ -362,3 +362,70 @@ describe("runAtomicSkillPlanV1", () => {
     expect(trackById(await snapshot(), track.id).volumeDb).toBe(-6);
   });
 });
+
+// Step-1 slice 6 — the plan MAY carry turn provenance for the batch_begin marker. The
+// engine logs batch_begin's args verbatim and stamps `turn_id` as a sibling on every
+// JSONL line of the transaction, so a skill run becomes one readable turn. Absent ⇒
+// the batch_begin args are byte-identical to before (the static-catalog adapter and
+// every native skill pass none today).
+describe("runAtomicSkillPlanV1 — batch_begin provenance (step-1 slice 6)", () => {
+  beforeEach(async () => {
+    __resetMockForTests();
+    await useStore.getState().refresh();
+  });
+
+  async function captureBeginArgs(plan: AtomicSkillPlanV1) {
+    let beginArgs: Record<string, unknown> | undefined;
+    const result = await runAtomicSkillPlanV1(plan, {
+      snapshot,
+      exec: async (c, a, t) => {
+        if (c === "batch_begin") beginArgs = a;
+        return storeExec(c, a, t);
+      },
+      guard: ALWAYS_OK_ATOMIC_GUARD,
+    });
+    return { result, beginArgs };
+  }
+
+  it("batch_begin args are byte-identical when the plan carries no provenance", async () => {
+    const before = await snapshot();
+    const plan = buildPlan(before, { trackId: firstTrack(before).id, db: -6 });
+    const { result, beginArgs } = await captureBeginArgs(plan);
+    expect(result.ok).toBe(true);
+    expect(beginArgs).toEqual({
+      transactionId: plan.transaction.transactionId,
+      name: plan.transaction.name,
+      commands: plan.transaction.manifest,
+    });
+    expect(Object.keys(beginArgs!)).toEqual(["transactionId", "name", "commands"]);
+  });
+
+  it("batch_begin carries turn_id / source / utterance when the plan supplies them", async () => {
+    const before = await snapshot();
+    const plan: AtomicSkillPlanV1 = {
+      ...buildPlan(before, { trackId: firstTrack(before).id, db: -6 }),
+      provenance: { turn_id: "t-9", source: "studio_skill", utterance: "lower the vocal 3 dB" },
+    };
+    const { result, beginArgs } = await captureBeginArgs(plan);
+    expect(result.ok).toBe(true);
+    expect(beginArgs).toEqual({
+      transactionId: plan.transaction.transactionId,
+      name: plan.transaction.name,
+      commands: plan.transaction.manifest,
+      turn_id: "t-9",
+      source: "studio_skill",
+      utterance: "lower the vocal 3 dB",
+    });
+  });
+
+  it("absent provenance keys stay absent — never an empty string", async () => {
+    const before = await snapshot();
+    const plan: AtomicSkillPlanV1 = {
+      ...buildPlan(before, { trackId: firstTrack(before).id, db: -6 }),
+      provenance: { turn_id: "t-10", utterance: "" },
+    };
+    const { result, beginArgs } = await captureBeginArgs(plan);
+    expect(result.ok).toBe(true);
+    expect(Object.keys(beginArgs!)).toEqual(["transactionId", "name", "commands", "turn_id"]);
+  });
+});

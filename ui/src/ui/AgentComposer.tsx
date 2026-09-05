@@ -74,7 +74,9 @@ export function AgentComposer() {
       if (!snap) throw new Error("no session snapshot available");
       return snap;
     },
-    exec: (command, args, transaction) => useStore.getState().exec(command, args, transaction),
+    // Step-1 slice 6 — every command a studio skill runs names its lane on the envelope
+    // (store.exec's fourth argument ⇒ the `origin` sibling MoshOps stamps on the JSONL).
+    exec: (command, args, transaction) => useStore.getState().exec(command, args, transaction, "studio_skill"),
     readSourceStatus: readSkillSourceStatusV1,
     runBatch: (label, calls) => runAgentBatch(label, calls, { utterance: text, source: "studio_skill" }),
     refresh: () => useStore.getState().refresh(),

@@ -220,8 +220,9 @@ describe("AgentComposer named plug-in skill", () => {
     act(() => setInputValue(input, "can you load serum 2?"));
     await act(async () => send.click());
 
-    expect(exec).toHaveBeenCalledWith("list_plugins", {}, undefined);
-    expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "serum-2" }, expect.any(Object));
+    // Step-1 slice 6 — the skill environment's exec names its lane on the envelope.
+    expect(exec).toHaveBeenCalledWith("list_plugins", {}, undefined, "studio_skill");
+    expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "serum-2" }, expect.any(Object), "studio_skill");
     expect(exec.mock.calls.map(([command]) => command)).toEqual([
       "list_plugins",
       "batch_begin",
@@ -251,7 +252,7 @@ describe("AgentComposer named plug-in skill", () => {
 
     act(() => setInputValue(input, "2"));
     await act(async () => send.click());
-    expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "serum-vst3" }, expect.any(Object));
+    expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "serum-vst3" }, expect.any(Object), "studio_skill");
     expect(host.querySelector("[role=status]")?.textContent).toBe("Done.");
   });
 

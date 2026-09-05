@@ -55,7 +55,27 @@ export type AtomicSkillPlanV1 = {
     after: Snapshot,
     changes: SkillExecutionSummary,
   ) => SkillCheck | Promise<SkillCheck>;
+  /** Step-1 slice 6 — optional turn provenance for the batch_begin marker. The engine logs
+   *  batch_begin's args verbatim and stamps `turn_id` as a sibling on every JSONL line of
+   *  the transaction. Absent ⇒ the batch_begin args are byte-identical to before; a key
+   *  whose value is empty is omitted, never sent as an empty string. */
+  readonly provenance?: AtomicSkillProvenanceV1;
 };
+
+export type AtomicSkillProvenanceV1 = {
+  readonly turn_id?: string;
+  readonly source?: string;
+  readonly utterance?: string;
+};
+
+function provenanceArgs(provenance: AtomicSkillProvenanceV1 | undefined): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  if (!provenance) return args;
+  if (provenance.turn_id) args.turn_id = provenance.turn_id;
+  if (provenance.source) args.source = provenance.source;
+  if (provenance.utterance) args.utterance = provenance.utterance;
+  return args;
+}
 
 export type AtomicSkillGuardContextV1 = {
   readonly skill: string;
@@ -222,6 +242,7 @@ export async function runAtomicSkillPlanV1(
       transactionId: transaction.transactionId,
       name: transaction.name,
       commands: transaction.manifest,
+      ...provenanceArgs(plan.provenance),
     });
   } catch (error) {
     // A rejected begin promise is ambiguous: the transaction may or may not be open.
