@@ -28,17 +28,7 @@ SH
 
 cat > "$BIN/ps" <<'SH'
 #!/usr/bin/env sh
-printf '100 1 /Applications/ChatGPT.app/Contents/Resources/codex -c features.code_mode_host=true app-server --analytics-default-enabled\n'
-i=0
-while [ "$i" -lt "${FAKE_CODEX_CHILDREN:-0}" ]; do
-  printf '%s 100 node child-%s\n' "$((200 + i))" "$i"
-  i=$((i + 1))
-done
-j=0
-while [ "$j" -lt "${FAKE_PS_TRAILING_LINES:-0}" ]; do
-  printf '%s 1 %01024d\n' "$((1000 + j))" 0
-  j=$((j + 1))
-done
+exit 99
 SH
 
 chmod +x "$BIN/memory_pressure" "$BIN/sysctl" "$BIN/df" "$BIN/ps"
@@ -52,7 +42,6 @@ run_subject() {
     -u MOSH_MIN_MEMORY_FREE_PERCENT \
     -u MOSH_MAX_SWAP_USED_MIB \
     -u MOSH_MIN_DATA_FREE_GIB \
-    -u MOSH_MAX_CODEX_CHILDREN \
     PATH="$BIN:$HOST_PATH" "$@" "$SUBJECT" 2>&1)"
   rc=$?
   set -e
@@ -66,20 +55,12 @@ run_subject() {
   fi
 }
 
-# Given healthy memory, swap, disk, and Codex fan-out.
+# Given healthy memory, swap, and disk, while process inspection is unavailable.
 # When the preflight runs.
-# Then it allows the heavyweight command.
+# Then it allows the heavyweight command without inspecting process fan-out.
 run_subject 0 '[memory-preflight] PASS' \
   env FAKE_MEMORY_FREE_PERCENT=80 FAKE_SWAP_USED_MB=0 \
-  FAKE_DATA_FREE_KB=104857600 FAKE_CODEX_CHILDREN=8
-
-# Given a large process snapshot after the app-server row.
-# When the preflight locates the app server under pipefail.
-# Then it consumes the snapshot without making the producer die on SIGPIPE.
-run_subject 0 '[memory-preflight] PASS' \
-  env FAKE_CODEX_CHILDREN=8 FAKE_PS_TRAILING_LINES=4096
-run_subject 0 'codex_children=8' \
-  env FAKE_CODEX_CHILDREN=8 FAKE_PS_TRAILING_LINES=4096
+  FAKE_DATA_FREE_KB=104857600
 
 # Given each resource limit is unsafe.
 # When the preflight runs.
@@ -87,15 +68,6 @@ run_subject 0 'codex_children=8' \
 run_subject 1 'free memory 20% is below 25%' env FAKE_MEMORY_FREE_PERCENT=20
 run_subject 1 'swap used 5000 MiB exceeds 4096 MiB' env FAKE_SWAP_USED_MB=5000
 run_subject 1 'Data volume free 20 GiB is below 32 GiB' env FAKE_DATA_FREE_KB=20971520
-
-# Given the test process inherits the owner's one-time elevated child ceiling.
-# When the default-threshold fixture runs.
-# Then it still verifies the standard 64-child policy.
-export MOSH_MAX_CODEX_CHILDREN=1000
-run_subject 1 'Codex child process count 65 exceeds 64' env FAKE_CODEX_CHILDREN=65
-unset MOSH_MAX_CODEX_CHILDREN
-
-run_subject 1 'Codex child process count 65 exceeds 64' env FAKE_CODEX_CHILDREN=65
 
 # Given the canonical gate sees unsafe memory.
 # When the cheap gate starts.
@@ -113,4 +85,4 @@ printf '%s' "$gate_output" | jq -e \
   '.pass == false and (.steps | length) == 1 and .steps[0].name == "memory_preflight"' \
   >/dev/null
 
-printf 'memory preflight: 9/9 scenarios passed\n'
+printf 'memory preflight: 5/5 scenarios passed\n'

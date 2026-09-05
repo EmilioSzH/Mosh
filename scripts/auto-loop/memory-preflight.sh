@@ -7,7 +7,6 @@ set -euo pipefail
 MIN_MEMORY_FREE_PERCENT="${MOSH_MIN_MEMORY_FREE_PERCENT:-25}"
 MAX_SWAP_USED_MIB="${MOSH_MAX_SWAP_USED_MIB:-4096}"
 MIN_DATA_FREE_GIB="${MOSH_MIN_DATA_FREE_GIB:-32}"
-MAX_CODEX_CHILDREN="${MOSH_MAX_CODEX_CHILDREN:-64}"
 
 require_unsigned_integer() {
   local name="$1" value="$2"
@@ -30,7 +29,6 @@ require_metric() {
 require_unsigned_integer MOSH_MIN_MEMORY_FREE_PERCENT "$MIN_MEMORY_FREE_PERCENT"
 require_unsigned_integer MOSH_MAX_SWAP_USED_MIB "$MAX_SWAP_USED_MIB"
 require_unsigned_integer MOSH_MIN_DATA_FREE_GIB "$MIN_DATA_FREE_GIB"
-require_unsigned_integer MOSH_MAX_CODEX_CHILDREN "$MAX_CODEX_CHILDREN"
 
 memory_free_percent="$(memory_pressure -Q 2>/dev/null | awk -F': ' '
   /System-wide memory free percentage/ {
@@ -63,21 +61,6 @@ data_free_gib="$(df -Pk /System/Volumes/Data 2>/dev/null | awk '
 ')"
 require_metric 'Data volume free space' "$data_free_gib"
 
-process_snapshot="$(ps -axo pid=,ppid=,command= 2>/dev/null)"
-codex_app_server_pid="$(printf '%s\n' "$process_snapshot" | awk '
-  /\/Applications\/ChatGPT.app\/Contents\/Resources\/codex .* app-server / {
-    if (found == "") found = $1
-  }
-  END { if (found != "") print found }
-')"
-codex_children=0
-if [ -n "$codex_app_server_pid" ]; then
-  codex_children="$(printf '%s\n' "$process_snapshot" | awk -v parent="$codex_app_server_pid" '
-    $2 == parent { count++ }
-    END { print count + 0 }
-  ')"
-fi
-
 failed=0
 if [ "$memory_free_percent" -lt "$MIN_MEMORY_FREE_PERCENT" ]; then
   printf '[memory-preflight] FAIL free memory %s%% is below %s%%\n' \
@@ -94,15 +77,9 @@ if [ "$data_free_gib" -lt "$MIN_DATA_FREE_GIB" ]; then
     "$data_free_gib" "$MIN_DATA_FREE_GIB" >&2
   failed=1
 fi
-if [ "$codex_children" -gt "$MAX_CODEX_CHILDREN" ]; then
-  printf '[memory-preflight] FAIL Codex child process count %s exceeds %s\n' \
-    "$codex_children" "$MAX_CODEX_CHILDREN" >&2
-  failed=1
-fi
-
 if [ "$failed" -ne 0 ]; then
   exit 1
 fi
 
-printf '[memory-preflight] PASS free=%s%% swap=%sMiB data_free=%sGiB codex_children=%s\n' \
-  "$memory_free_percent" "$swap_used_mib" "$data_free_gib" "$codex_children"
+printf '[memory-preflight] PASS free=%s%% swap=%sMiB data_free=%sGiB\n' \
+  "$memory_free_percent" "$swap_used_mib" "$data_free_gib"

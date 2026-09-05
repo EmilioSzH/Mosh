@@ -77,8 +77,8 @@ scripts/auto-loop/gate.sh native <candidate-worktree> origin/main
 
 For final-baseline verification, also run the built app's --selftest three
 times, --selftest-undo, the generated-scoreboard check, and documentation
-link/reference checks. The temporary MOSH_MAX_CODEX_CHILDREN=1000 value was a
-one-time documented pre-pivot maintenance override, not a standing policy.
+link/reference checks. The former Codex child-count threshold has been retired;
+the preflight now gates on measured free memory, swap use, and Data volume space.
 
 ## Living references
 

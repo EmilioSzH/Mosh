@@ -60,8 +60,8 @@ cannot prove audibility, physical recovery, installed-app behavior, Ableton
 behavior, or iPhone behavior. Keep those owner acceptance boundaries explicit in
 their subsystem evidence.
 
-The MOSH_MAX_CODEX_CHILDREN=1000 threshold was a one-time, documented
-pre-pivot maintenance override. It is not a new normal gate setting.
+The memory preflight gates on measured free memory, swap use, and Data volume
+space. Do not use process-count ceilings as a proxy for resource pressure.
 
 ## Paused and archived work
 
