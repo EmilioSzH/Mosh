@@ -4,6 +4,7 @@ import { pushEscapeHandler } from "../hooks/escapeStack";
 import { AgentComposer } from "../ui/AgentComposer";
 import { AgentDrawer } from "../v2/agent/AgentDrawer";
 import { ChangeToast } from "../v2/ChangeToast";
+import { ProToolsReverbMacro } from "./ProToolsReverbMacro";
 
 export function ProToolsMoshiDrawer({ open, onClose, returnFocusRef }: {
   readonly open: boolean;
@@ -37,6 +38,8 @@ export function ProToolsMoshiDrawer({ open, onClose, returnFocusRef }: {
       <div className="pt-moshi-body">
         <AgentDrawer />
         <ChangeToast />
+        {/* Step-1 slice 7 — the one direct control, kept next to the composer it bypasses. */}
+        <ProToolsReverbMacro />
         <AgentComposer />
       </div>
     </aside>

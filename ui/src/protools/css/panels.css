@@ -477,6 +477,16 @@
 .pt-moshi-drawer .v2-toast { position: static; display: flex; align-items: center; gap: 7px; transform: none; padding: 7px 8px; border: 1px solid var(--pt-highlight); color: var(--pt-text); background: var(--pt-inset); }
 .pt-moshi-drawer .v2-toast-text { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pt-moshi-drawer .v2-toast-undo { border: 1px solid var(--pt-border); color: var(--pt-text); background: var(--pt-raised); }
+.pt-reverb-macro { display: grid; gap: 5px; padding: 7px 8px; border: 1px solid var(--pt-border); background: var(--pt-surface); font-size: 10px; }
+.pt-reverb-macro-label { overflow: hidden; color: var(--pt-text); font-weight: 700; letter-spacing: 0.04em; text-overflow: ellipsis; white-space: nowrap; }
+.pt-reverb-macro-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 7px; }
+.pt-reverb-macro-row input[type="range"] { min-width: 0; margin: 0; accent-color: var(--pt-selected); }
+.pt-reverb-macro-row output { min-width: 58px; color: var(--pt-text); font: 600 10px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
+.pt-reverb-macro-row button { min-height: 24px; padding: 0 7px; border: 1px solid var(--pt-border); border-top-color: var(--pt-highlight); border-radius: 2px; color: var(--pt-text); background: var(--pt-raised); }
+.pt-reverb-macro-row button:disabled { color: var(--pt-text-muted); opacity: 0.55; }
+.pt-reverb-macro-row input:focus-visible,
+.pt-reverb-macro-row button:focus-visible { outline: 2px solid var(--pt-focus-ring); }
+.pt-reverb-macro-unbound { margin: 0; color: var(--pt-text-muted); font-style: italic; }
 .pt-generative-drawer {
   --ink: var(--pt-inset);
   --ink-deep: var(--pt-canvas);
