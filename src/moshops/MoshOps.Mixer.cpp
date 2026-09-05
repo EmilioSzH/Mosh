@@ -620,7 +620,12 @@ juce::var MoshOps::cmdSetSendLevel (const juce::var& args)
     auto* s = track->getAuxSendPlugin ((int) args.getProperty ("bus", -1));
     if (s == nullptr) return errResult ("set_send_level", "no send to that bus");
     beginTxn ("set_send_level");
-    s->setGainDb (juce::jlimit (-100.0f, 6.0f, (float) (double) args.getProperty ("db", 0.0)));
+    // Step-1 slice 5 (R4) — one UndoableAction that writes the parameter AND its tree value
+    // and replays both on undo/redo (see SetSendParamValueAction); setGainDb alone left the
+    // readback stale after undo and cost a second undo step.
+    undoManager().perform (new SetSendParamValueAction (*s, SetSendParamValueAction::Which::level,
+        te::decibelsToVolumeFaderPosition (juce::jlimit (-100.0f, 6.0f,
+                                                         (float) (double) args.getProperty ("db", 0.0)))));
     logLine ("set_send_level", args, true, {}, true);
     emitSnapshotInvalidated();
     return okResult ("set_send_level");
@@ -633,7 +638,9 @@ juce::var MoshOps::cmdSetSendMute (const juce::var& args)
     auto* s = track->getAuxSendPlugin ((int) args.getProperty ("bus", -1));
     if (s == nullptr) return errResult ("set_send_mute", "no send to that bus");
     beginTxn ("set_send_mute");
-    s->setMute ((bool) args.getProperty ("mute", false));
+    // Step-1 slice 5 (R4) — same one-action discipline as set_send_level.
+    undoManager().perform (new SetSendParamValueAction (*s, SetSendParamValueAction::Which::mute,
+        (bool) args.getProperty ("mute", false) ? 1.0f : 0.0f));
     logLine ("set_send_mute", args, true, {}, true);
     emitSnapshotInvalidated();
     return okResult ("set_send_mute");
@@ -648,7 +655,9 @@ juce::var MoshOps::cmdSetSendPan (const juce::var& args)
     const auto pan = (double) args.getProperty ("pan", 0.0);
     if (! std::isfinite (pan)) return errResult ("set_send_pan", "pan must be finite");
     beginTxn ("set_send_pan");
-    s->setPan ((float) pan);
+    // Step-1 slice 5 (R4) — same one-action discipline as set_send_level.
+    undoManager().perform (new SetSendParamValueAction (*s, SetSendParamValueAction::Which::pan,
+        juce::jlimit (-1.0f, 1.0f, (float) pan)));
     logLine ("set_send_pan", args, true, {}, true);
     emitSnapshotInvalidated();
     return okResult ("set_send_pan");

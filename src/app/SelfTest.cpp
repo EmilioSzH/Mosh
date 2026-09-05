@@ -15433,8 +15433,17 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
                                     objN ({ { "trackId", dt }, { "seconds", 1.0 }, { "freq", 330.0 } })), "clipId");
         const int  mbus = (int) cmd (ops, "create_bus", args1 ("name", "MxBus"))
                               .getProperty ("data", var()).getProperty ("busNumber", -1);
+        // Step-1 slice 5 — a persistent send for the set_send_* rows. The add_send row
+        // below is undone by the loop (every row is), so the send it creates is gone by
+        // the next row; these three rows need a send that survives, on a track the
+        // remove_track row does not touch (the persist pass re-applies the table
+        // cumulatively, so MxDisposable is gone by then).
+        const auto st   = rid (cmd (ops, "create_track", args1 ("name", "MxSendSrc")), "trackId");
+        const auto stSend = (mbus >= 0 && st.isNotEmpty())
+                              ? cmd (ops, "add_send", objN ({ { "trackId", st }, { "bus", mbus }, { "db", -6.0 } }))
+                              : var();
         check (mt.isNotEmpty() && mwc.isNotEmpty() && eqIx >= 0 && mmc.isNotEmpty()
-               && dc.isNotEmpty() && mbus >= 0, "matrix fixture built");
+               && dc.isNotEmpty() && mbus >= 0 && st.isNotEmpty() && ok (stSend), "matrix fixture built");
 
         Array<var> rippleTracks; rippleTracks.add (var (mt));
         struct MatrixCase { String name; var args; };
@@ -15489,6 +15498,12 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
             { "remove_track",         objN ({ { "trackId", dt } }) },
             { "create_bus",           objN ({ { "name", "MxBus2" } }) },
             { "add_send",             objN ({ { "trackId", mt }, { "bus", mbus }, { "db", -3.0 } }) },
+            // Step-1 slice 5 (R4) — the three send edits, on the fixture send above. Each
+            // must restore on ONE undo with a synchronous readback: the snapshot reads the
+            // AutomatableParameter's live value (getGainDb/isMute/getPan), not the tree.
+            { "set_send_level",       objN ({ { "trackId", st }, { "bus", mbus }, { "db", -18.0 } }) },
+            { "set_send_mute",        objN ({ { "trackId", st }, { "bus", mbus }, { "mute", true } }) },
+            { "set_send_pan",         objN ({ { "trackId", st }, { "bus", mbus }, { "pan", 0.5 } }) },
             { "delete_time_range",    objN ({ { "start", 0.5 }, { "end", 1.0 },
                                               { "trackIds", var (rippleTracks) }, { "ripple", true } }) },
         };
