@@ -66,7 +66,13 @@ export function ProToolsReverbMacro() {
   const refresh = useStore((state) => state.refresh);
   const setLastError = useStore((state) => state.setLastError);
   const projectEpoch = useStore((state) => state.projectEpoch);
-  const binding = resolveReverbMacroBinding(snapshot);
+  const projectTransitioning = useStore((state) => state.projectTransitioning);
+  // While the store swaps projects (open/new/reload/recover) the epoch has already moved but
+  // `snapshot` still describes the OUTGOING project until the new one lands. A binding read
+  // from it would be verified against the wrong project, and its level would be captured as
+  // the new epoch's reset point — an inverted Reset once the real snapshot arrives. Nothing
+  // is verified until the transition ends, so for that window the control does not exist.
+  const binding = projectTransitioning ? null : resolveReverbMacroBinding(snapshot);
   const [captured, setCaptured] = useState<ResetPoint | null>(null);
 
   if (!binding) {
