@@ -7,6 +7,10 @@
 {"command":"load_builtin","args":{"trackId":"${BT}","type":"reverb"}}
 {"command":"add_send","args":{"trackId":"${V}","bus":"${B}","db":-12}}
 {"command":"set_track_volume","args":{"trackId":"${V}","db":-10}}
+# Pump once after the fixture: track creation arms the engine's deferred TrackList sort, which is written through the
+# UndoManager on the first message pump. Every GUI turn pumps; the headless runner pumps only on __wait, and without this
+# line the sort lands after the first undo as a phantom transaction that the second undo consumes (2026-09-05 finding).
+{"command":"__wait","args":{"ms":300}}
 {"command":"__snapshot","args":{"label":"base"}}
 {"command":"export_audio","args":{"file":"$OUT/base.wav","format":"wav","bitDepth":32,"range":"full","tail":"cut"}}
 {"command":"batch_begin","args":{"name":"S1","turn_id":"probe-1","source":"probe","utterance":"lower the vocal 3 dB"}}

@@ -7,7 +7,7 @@ conversation. The author's "green" is not the verdict; this audit is.
 
 Audit a Mosh implementation candidate against its baseline. Repository:
 `/Users/emiliosanchez-harris/Mosh` (use the candidate's own worktree; do not reset,
-relocate, merge or push anything). Baseline SHA `0da6c638eaa719296e3c97650a405f1afc9e8f53`.
+relocate, merge or push anything). Code baseline `0da6c638eaa719296e3c97650a405f1afc9e8f53`; the candidate branch starts at the docs commit `e57c74d4` whose code tree is identical to it, so run scope diffs against `e57c74d4` and treat `docs/**` as allowed.
 Candidate SHA and branch: `<fill in>`. The brief is
 `docs/pivot-2026-09/BRIEF-STEP1-USEFUL-EDITS-EXACTLY-ONCE.md`; read it first, then this.
 
@@ -15,8 +15,8 @@ Report every status with the vocabulary **verified · reported-not-rerun · infe
 · absent · blocked**, with the exact command, exit code and output excerpt. Report raw counts
 with denominators. Unknowns stay unknown. Do not improve a count by changing its denominator.
 
-1. **Scope.** `git diff --stat <baseline>..<candidate>`. FAIL if any changed file is outside
-   the brief's allowed-files table, or if any protected file changed
+1. **Scope.** `git diff --stat e57c74d4..<candidate>`. FAIL if any changed non-docs file is outside
+   the brief's allowed-files table (including its 2026-09-05 additions), or if any protected file changed
    (`ui/src/agent/sessionRender.ts`, `ui/src/agent/loop/producePrompt.ts`,
    `ui/src/agent/loop/produceTemplate.ts`, `ui/src/agent/commands.ts`,
    `ui/src/agent/fastPath.ts`, the studio-skill match order in
@@ -33,13 +33,17 @@ with denominators. Unknowns stay unknown. Do not improve a count by changing its
    and run `docs/pivot-2026-09/repro/step1-fader-send-undo.jsonl` with
    `MOSH_NO_AUDIO=1 MOSH_SELFTEST_SESSION=_harness/audit-<sha> MOSH_RUN_SCRIPT=<script> MOSH_RUN_SCRIPT_OUT=<out>`.
    Baseline behaviour (recorded 2026-09-05): after `set_send_level −18` + `undo`, the
-   snapshot still reads −18 (stale until reopen) and the next `undo` does not restore the
-   fader. Candidate must show: `undo_send_immediate` reads −12, `undo_fader` reads −10,
+   snapshot still reads −18 (stale until reopen). The script pumps once after the fixture
+   (`__wait 300`) because track creation arms the engine's deferred track sort, which is
+   written through the undo manager on the first pump; without the pump it forms a phantom
+   transaction that the second undo consumes (fader edits alone reproduce it; every GUI turn
+   pumps). Candidate must show: `undo_send_immediate` reads −12, `undo_fader` reads −10,
    `reopened` equals `undo_fader` on `volumeDb` and `sends`, and every JSONL line in
    `<session>/mosh-log.jsonl` carries `origin`, with `turn_id` present on the lines inside
    the batch. FAIL on any deviation. Run `Mosh --selftest-undo` once and `--selftest` once;
    record the check counts and rc (rc 139 is a known intermittent crash class — rerun once,
-   report both).
+   report both). The candidate adds P6 rows and a STEP1-PROV section, so the total check count
+   rises; a count is not a target.
 4. **The 20 requests through the real composer.** Launch via
    `scripts/produce-lane/launch-app.sh` (refuses if any Mosh.app is running; never kill the
    owner's `/Applications/Mosh.app`). Open a **copy** of the fixture project produced by

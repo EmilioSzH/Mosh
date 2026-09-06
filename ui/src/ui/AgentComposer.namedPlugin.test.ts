@@ -368,7 +368,8 @@ describe("AgentComposer named plug-in skill", () => {
       await send("add OTT");
 
       expect(loopControls.calls).toEqual([]);
-      expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "ott" }, expect.any(Object));
+      // Fourth argument = the `origin` sibling the studio-skill environment passes (slice 6).
+      expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "ott" }, expect.any(Object), "studio_skill");
       expect(exec.mock.calls.filter(([command]) => command === "load_plugin")).toHaveLength(1);
       expect(host.querySelector("[role=status]")?.textContent).toBe("Done.");
     });
