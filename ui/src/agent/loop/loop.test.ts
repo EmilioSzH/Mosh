@@ -424,6 +424,31 @@ describe("runAgentLoop — exactly once (step-1 slice 3)", () => {
     expect(spy.skips()[0]).toMatchObject({ kind: "skip", index: 1, commands: [C] });
   });
 
+  it("a two-round repair chain never re-runs a command that succeeded earlier in the chain", async () => {
+    const spy = progressSpy();
+    const N = CMD("add_note", { clipId: "9", pitch: 60, start: 0, length: 1 });
+    const W = CMD("set_clip_warp", { clipId: "9", autoTempo: true });
+    const S1 = CMD("stretch_clip", { clipId: "9", bars: 4 });
+    const S2 = CMD("stretch_clip", { clipId: "9", bars: 2 });
+    const { chat } = scriptedChat([
+      { status: "continue", plan: [{ goal: "note and warp", commands: [N, W] }] },
+      { status: "continue", commands: [S1] },              // repair 1 — fails too
+      { status: "done", say: "fixed", commands: [N, S2] }, // repair 2 re-sends N, which landed in step 1
+    ]);
+    const { env, batches } = scriptedEnv([
+      [{ command: "add_note", ok: true }, { command: "set_clip_warp", ok: false, error: "not an audio clip" }],
+      [{ command: "stretch_clip", ok: false, error: "too short" }],
+      "ok",
+    ]);
+    const run = await runAgentLoop({ ask: "warp it" }, { chat, env, onProgress: spy.onProgress } as LoopDeps);
+
+    // add_note is issued exactly once across the whole chain (RED before the chain-wide window: twice)
+    expect(batches.map((b) => b.commands)).toEqual([["add_note", "set_clip_warp"], ["stretch_clip"], ["stretch_clip"]]);
+    expect(run.outcome).toBe("done");
+    expect(spy.skips().map((s) => s.commands)).toEqual([[N]]);
+    expect(run.transcript[2]!.say).toMatch(/skipped 1 .*steps 1–2.*add_note/);
+  });
+
   it("a repair that re-sends ONLY already-applied commands runs nothing, ends by its status, and the skip stays visible", async () => {
     const spy = progressSpy();
     const W = CMD("set_clip_warp", { clipId: "9", autoTempo: true });

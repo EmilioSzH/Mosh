@@ -211,6 +211,11 @@ export async function runAgentLoop(task: { ask: string }, deps: LoopDeps): Promi
 
   // ── STEP LOOP ───────────────────────────────────────────────────────────────
   let repairMode = false;
+  // Index of the step that opened the current repair chain (the first step with a failed
+  // command), or -1 outside a chain. A repair twin may skip any command that already
+  // succeeded ANYWHERE in the chain — not just in the immediately preceding record — so a
+  // second repair round cannot land an additive command a second time.
+  let repairChainStart = -1;
   while (!outcome) {
     if (aborted()) { outcome = "aborted"; break; }
     if (now() - t0 > b.softWallMs) { outcome = "budget"; break; }
@@ -235,11 +240,15 @@ export async function runAgentLoop(task: { ask: string }, deps: LoopDeps): Promi
       // right after it is pushed) — and say so. Anything that failed there, or is
       // new, runs.
       const repaired = transcript[transcript.length - 1]!;
-      const applied = new Set(repaired.commands.filter((_, i) => repaired.results[i]?.ok === true).map(canonCommand));
+      const chainStart = repairChainStart >= 0 ? repairChainStart : transcript.length - 1;
+      const applied = new Set<string>();
+      for (const rec of transcript.slice(chainStart))
+        rec.commands.forEach((c, i) => { if (rec.results[i]?.ok === true) applied.add(canonCommand(c)); });
       const [remaining, alreadyApplied] = partitionByIdentity(r.commands, applied);
       if (alreadyApplied.length) {
+        const from = chainStart + 1 === transcript.length ? `step ${transcript.length}` : `steps ${chainStart + 1}–${transcript.length}`;
         skip(transcript.length, alreadyApplied,
-          `skipped ${alreadyApplied.length} already-applied command(s) from step ${transcript.length}: ${commandNames(alreadyApplied)}`);
+          `skipped ${alreadyApplied.length} already-applied command(s) from ${from}: ${commandNames(alreadyApplied)}`);
         if (!remaining.length) {
           // Nothing left to run: the note attaches to the step it repairs, and the
           // reply counts as an empty repair — its status decides, as above.
@@ -322,9 +331,11 @@ export async function runAgentLoop(task: { ask: string }, deps: LoopDeps): Promi
 
     if (results.some((r) => !r.ok)) {
       repairMode = true;      // the next model call sees the verbatim envelopes
+      if (repairChainStart < 0) repairChainStart = index;   // the chain opens at the first failed step
       doneAfterStep = false;
       continue;
     }
+    repairChainStart = -1;    // a clean step closes the chain
     if (doneAfterStep) { outcome = "done"; break; }
     if (planIdx >= plan.length && lastStatus === "plan") { outcome = "done"; break; }
   }

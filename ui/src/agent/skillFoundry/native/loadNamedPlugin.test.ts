@@ -395,21 +395,37 @@ describe("loadNamedPluginV1 — part words under add/insert/put never claim a su
     }
   });
 
-  it("an exact or prefix match is still claimed under add — only the substring rank is withheld", async () => {
+  it("an exact name is still claimed under add; a bare prefix is not (\"add a hook\" must not load Hook Machine)", async () => {
     const exact = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", [plugin({ id: "harmony", name: "Harmony", manufacturer: "Xfer", isInstrument: false })]);
     expect(await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(exact), utterance: "add a harmony", slots: {} })).toMatchObject({ kind: "completed" });
     expect(exact.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["harmony"]);
 
     const prefix = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", [plugin({ id: "hook-machine", name: "Hook Machine", manufacturer: "Xfer", isInstrument: false })]);
-    expect(await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(prefix), utterance: "add a hook", slots: {} })).toMatchObject({ kind: "completed" });
-    expect(prefix.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["hook-machine"]);
+    expect(await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(prefix), utterance: "add a hook", slots: {} })).toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    expect(prefix.batchBeginCalls).toHaveLength(0);
   });
 
-  it("a multi-word query that is not a listed part word keeps the substring rank (\"add Harmony Mono\" still loads)", async () => {
+  it("\"add a beat\" against a catalog holding Splice Beatmaker is unsupported — a prefix hit is still a hijack of a musical ask", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", [
+      ...harmonyCatalog(), plugin({ id: "splice-beatmaker", name: "Beatmaker", manufacturer: "Splice", isInstrument: true }),
+    ]);
+    const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "add a beat", slots: {} });
+    expect(outcome).toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    expect(engine.batchBeginCalls).toHaveLength(0);
+  });
+
+  it("an explicit \"plugin\" keyword restores the prefix claim under add (\"add the plugin harmony\" → Harmony Mono)", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", [plugin({ id: "harmony-mono", name: "Harmony Mono", manufacturer: "Waves", isInstrument: false })]);
+    const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "add the plugin harmony", slots: {} });
+    expect(outcome).toMatchObject({ kind: "completed" });
+    expect(engine.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["harmony-mono"]);
+  });
+
+  it("a multi-word query that is not the plug-in's exact name no longer claims it (\"add Harmony Mono\" vs \"Waves Harmony Mono\" is unsupported; the exact name loads)", async () => {
     const engine = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", harmonyCatalog());
-    const outcome = await loadNamedPluginV1({
-      payload: PAYLOAD, environment: environmentFor(engine), utterance: "add Harmony Mono", slots: {},
-    });
+    expect(await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "add Harmony Mono", slots: {} }))
+      .toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "add Waves Harmony Mono", slots: {} });
     expect(outcome).toMatchObject({ kind: "completed" });
     expect(engine.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["waves-harmony-mono"]);
   });

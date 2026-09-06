@@ -60,23 +60,11 @@ const MAX_PLUGIN_FIELD_LENGTH_V1 = 1_024;
 
 type PluginVerbV1 = "load" | "add" | "insert" | "put";
 
-// Common part words a producer says after add/insert/put when asking for MUSIC, not a
-// plug-in. Matched against the normalized query (below), singular or plural. Under those
-// verbs such a query never claims a plug-in through the substring rank — only an exact or
-// prefix match counts — because with a real 1,198-entry catalog almost every one of these
-// words sits inside some installed plug-in's name.
-const PART_WORD_QUERY_V1 =
-  /^(?:(?:counter )?(?:phrases?|melod(?:y|ies)|harmon(?:y|ies))|hooks?|riffs?|fills?|bass ?lines?|chords?|layers?|parts?)$/;
-
 // Mirrors pluginBrowserUtil.ts's private `normalizePluginText` (NFKD, lower-case, runs of
-// non-alphanumerics collapsed to one space) so the prefix test below sees the same text
-// `resolvePluginMatch` ranks. Kept local: that module is outside this slice's file map.
+// non-alphanumerics collapsed to one space) so the exact/prefix tests below see the same
+// text `resolvePluginMatch` ranks. Kept local: that module is outside this slice's file map.
 const normalizePluginTextV1 = (value: string): string =>
   value.normalize("NFKD").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-
-function isPartWordQueryV1(query: string): boolean {
-  return PART_WORD_QUERY_V1.test(normalizePluginTextV1(query));
-}
 
 // The entries `resolvePluginMatch` would rank 0–2 (exact name, exact vendor+name, or a
 // prefix of either ordering); everything it could only reach through its rank-3
@@ -95,8 +83,26 @@ function exactOrPrefixEntriesV1(entries: readonly PluginEntry[], rawQuery: strin
   });
 }
 
+// Group 2 records an explicit "plugin"/"plug-in" keyword: under add/insert/put it is the
+// producer saying, in so many words, that a plug-in is meant (see `candidates` below).
 const LOAD_PLUGIN_UTTERANCE_V1 =
-  /^(?:(?:can|could|would|will)\s+you\s+|please\s+|hey\s+moshi[, ]+)*(load|add|insert|put)\s+(?:(?:the|a)\s+)?(?:plugin\s+)?(.+?)(?:\s+(?:on|onto)\s+(?:the\s+)?(?:selected|current|this)\s+track)?[?!.]*$/i;
+  /^(?:(?:can|could|would|will)\s+you\s+|please\s+|hey\s+moshi[, ]+)*(load|add|insert|put)\s+(?:(?:the|a)\s+)?((?:plugin|plug-in)\s+)?(.+?)(?:\s+(?:on|onto)\s+(?:the\s+)?(?:selected|current|this)\s+track)?[?!.]*$/i;
+
+// The entries `resolvePluginMatch` would rank 0–1 only: the query IS the plug-in's name, or
+// its vendor+name in either order. Under add/insert/put with no explicit "plugin" keyword
+// this is the only claim allowed — a prefix ("add a beat" → Splice Beatmaker, "add a
+// melody" → Melodyne) is as much a hijack of a musical ask as the substring rank is.
+function exactEntriesV1(entries: readonly PluginEntry[], rawQuery: string): readonly PluginEntry[] {
+  const query = normalizePluginTextV1(rawQuery);
+  if (!query) return [];
+  return entries.filter((entry) => {
+    const name = normalizePluginTextV1(entry.name);
+    const vendor = normalizePluginTextV1(entry.vendor);
+    return name === query
+      || `${vendor} ${name}`.trim() === query
+      || `${name} ${vendor}`.trim() === query;
+  });
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -127,17 +133,18 @@ export function parsePluginCatalogV1(data: unknown): readonly PluginEntry[] | nu
   return entries;
 }
 
-function parsePluginUtteranceV1(utterance: string): { readonly verb: PluginVerbV1; readonly query: string } | null {
+function parsePluginUtteranceV1(utterance: string): { readonly verb: PluginVerbV1; readonly query: string; readonly explicitPlugin: boolean } | null {
   const match = utterance.trim().match(LOAD_PLUGIN_UTTERANCE_V1);
   const verb = match?.[1]?.toLowerCase() as PluginVerbV1 | undefined;
-  const query = match?.[2]?.trim();
+  const explicitPlugin = Boolean(match?.[2]);
+  const query = match?.[3]?.trim();
   // "add" is shared producer language. Do not claim obvious timeline/MIDI
   // creation asks and then fail while reading the installed plug-in catalog.
   // Actual plug-in names containing these words remain available through the
   // explicit "load plugin <name>" form.
   if (query && /\b(?:test\s+tone|midi\s+clip|audio\s+clip|clip|notes?)\b/i.test(query)
     && !/\bplugin\b/i.test(utterance)) return null;
-  return verb && query ? { verb, query } : null;
+  return verb && query ? { verb, query, explicitPlugin } : null;
 }
 
 export function pluginQueryV1(utterance: string): string | null {
@@ -457,12 +464,16 @@ export const loadNamedPluginV1: NativeSkillHandlerV1 = async ({ payload, environ
     return blocked(payload, "stale_context", "The project changed while I was finding that plug-in — try again.");
   }
 
-  // Under add/insert/put a common part word ("harmony", "hook", "fill", …) may only claim
-  // an exact or prefix match — never the substring rank, which with a real catalog would
-  // hand "add a harmony" to Waves Harmony Mono. "load X" keeps the full ranking.
-  const candidates = parsed.verb !== "load" && isPartWordQueryV1(query)
-    ? exactOrPrefixEntriesV1(observed.value, query)
-    : observed.value;
+  // Under add/insert/put the catalog may claim the ask only when the query IS a plug-in's
+  // name (exact, or vendor+name); with an explicit "plugin"/"plug-in" keyword a prefix
+  // counts too. Neither the substring rank ("add a harmony" → Waves Harmony Mono) nor a
+  // bare prefix ("add a beat" → Splice Beatmaker) may hijack a musical ask. "load X" keeps
+  // the full ranking: "load" is unambiguous producer language for a plug-in.
+  const candidates = parsed.verb === "load"
+    ? observed.value
+    : parsed.explicitPlugin
+      ? exactOrPrefixEntriesV1(observed.value, query)
+      : exactEntriesV1(observed.value, query);
   const match = resolvePluginMatch(candidates, query);
   if (match.kind === "none") {
     // Step-1 brief, slice 2: "add/insert/put <X>" with nothing in the catalog called X
