@@ -425,13 +425,23 @@ describe("explicitBalanceV1 — deterministic balance lane (step-1 slice 5)", ()
       expect(trackNamed(engine, "Drums").volumeDb).toBe(0);
     });
 
-    it("a trailing 'track' and other articles resolve too ('my drums track' -> Drums); a name that matches nothing still blocks", async () => {
+    it("a trailing 'track' and other articles resolve too ('my drums track' -> Drums); a NAMED target that matches nothing hands the turn back", async () => {
       const engine = auditFixture();
       expect(await run(engine, "set my drums track to -6 dB", { action: "set_level", db: -6, trackName: "my drums track" })).toMatchObject({ kind: "completed" });
       expect(trackNamed(engine, "Drums").volumeDb).toBe(-6);
+      // "the keys" is not a track here. Ending the turn `blocked` would dead-end an ask the
+      // router sends to the loop ("boost the highs 3 dB"); `unsupported` is the one outcome
+      // the composer declines to finish, so the turn proceeds to the router. Zero mutation.
       const missing = await run(engine, "set the keys to -6 dB", { action: "set_level", db: -6, trackName: "the keys" });
-      expect(missing).toMatchObject({ kind: "blocked", code: "missing_target" });
+      expect(missing).toMatchObject({ kind: "unsupported", code: "no_match" });
       expect(engine.mutationCalls).toHaveLength(1);
+    });
+
+    it("an ask with NO spoken name and no selection keeps its select-a-track guidance (not a fall-through)", async () => {
+      const engine = auditFixture();
+      const outcome = await run(engine, "set it to -6 dB", { action: "set_level", db: -6 });
+      expect(outcome).toMatchObject({ kind: "blocked", code: "missing_target" });
+      expect(engine.mutationCalls).toHaveLength(0);
     });
 
     it("the engine's fader position round trip (~2e-6 dB) no longer rolls a committed level back (S5, exact name)", async () => {

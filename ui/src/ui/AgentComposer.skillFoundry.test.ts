@@ -588,5 +588,48 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
       expect(mutations()).toEqual([]);
       expect(loopControls.calls).toEqual(["drop the drums 3 dB then bring the vocal up 1 dB", "the vocal is 3 dB too loud, fix it"]);
     });
+
+    // The widened matcher claims "<verb> <target> N dB" shapes. When the spoken target is
+    // not a track in this session (an EQ band, a section, a whole-mix idea) the skill must
+    // hand the turn back rather than end it blocked: slice 1 routes exactly these verbs to
+    // the loop, and a dead end here would be the audit's S5/S8 failure in new clothes.
+    it("a dB ask whose named target is not a track falls through to the loop instead of dead-ending", async () => {
+      loadAuditFixture();
+      await send("boost the highs 3 dB");
+      await send("bring the chorus up 3 dB");
+      expect(mutations()).toEqual([]);
+      expect(loopControls.calls).toEqual(["boost the highs 3 dB", "bring the chorus up 3 dB"]);
+      expect(vocal().volumeDb).toBe(-10);
+      expect(drums().volumeDb).toBe(0);
+    });
+
+    it("a collective ask is never claimed by the balance lane", async () => {
+      loadAuditFixture();
+      await send("bring everything down 3 dB");
+      expect(mutations()).toEqual([]);
+      expect(loopControls.calls).toEqual(["bring everything down 3 dB"]);
+    });
+
+    // A relative move must compute its target from the value the ENGINE holds now, not the
+    // store's cached snapshot: without the refresh the skill would write an absolute dB
+    // computed from a stale reading (here −13 instead of −7), silently moving the fader by
+    // the wrong amount.
+    it("a relative move reads the live engine value, not the store's cached snapshot", async () => {
+      loadAuditFixture();
+      vocal().volumeDb = -4;                      // engine moved behind the store's back
+      await send("lower the vocal 3 dB");
+      expect(mutations()).toEqual([["set_track_volume", { trackId: "v", db: -7 }]]);
+      expect(say()).toBe("Vocal −4 → −7 dB");
+    });
+
+    it("two buses matching one spoken word block rather than pick one", async () => {
+      loadAuditFixture([{ id: "r2", index: 4, name: "Big Reverb", type: "return", clips: [], isReturn: true, returnBus: 1 }]);
+      engine.buses = [{ bus: 0, name: "Reverb", trackId: "r" }, { bus: 1, name: "Big Reverb", trackId: "r2" }];
+      act(() => { useStore.setState({ snapshot: engine.snapshot() }); });
+      await send("more reverb on the vocal");
+      expect(mutations()).toEqual([]);
+      expect(loopControls.calls).toEqual([]);
+      expect(vocal().sends?.[0]?.db).toBe(-12);
+    });
   });
 });

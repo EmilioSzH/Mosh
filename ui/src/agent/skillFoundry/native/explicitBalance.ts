@@ -270,9 +270,18 @@ async function resolveTargetV1(
 function reasonFromTargetResolution(
   payload: NativeSkillPayloadV1,
   resolution: Exclude<TargetResolutionV1, { kind: "resolved" } | { kind: "needs_choice" }>,
+  namedTarget: boolean,
 ): SkillOutcomeV1 {
   switch (resolution.kind) {
     case "missing_target":
+      // A NAMED target this session has no track for ("boost the highs 3 dB", "bring the
+      // chorus up 3 dB") is most likely not a fader ask at all — an EQ band, a section, a
+      // whole-mix idea. Answer with the runtime's no-match shape, the one outcome the
+      // composer declines to finish, so the turn proceeds to the router and the loop can
+      // take it; ending the turn `blocked` here would dead-end exactly the asks slice 1
+      // routes to the loop. Nothing was read but the snapshot; nothing mutated.
+      // With NO name spoken the ask really is about the selection, so that keeps its guidance.
+      if (namedTarget) return { kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." };
       return blocked(payload, "missing_target", "No selected or uniquely named track to adjust.");
     case "ambiguous_target":
       return blocked(payload, "ambiguous_target", `${resolution.count} tracks share that name — rename one or select it directly.`);
@@ -724,7 +733,9 @@ export const explicitBalanceV1: NativeSkillHandlerV1 = async ({ payload, environ
 
   const resolution = await resolveTargetV1(before, environment, request.trackName);
   if (resolution.kind === "needs_choice") return issueChoiceV1(payload, environment, resolution.candidates, request);
-  if (resolution.kind !== "resolved") return reasonFromTargetResolution(payload, resolution);
+  if (resolution.kind !== "resolved") {
+    return reasonFromTargetResolution(payload, resolution, typeof request.trackName === "string" && request.trackName.trim().length > 0);
+  }
 
   return executeForTrackV1(payload, environment, before, request, resolution.trackId, epochAtStart);
 };
