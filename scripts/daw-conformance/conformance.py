@@ -1009,7 +1009,12 @@ def _canon_snap(snap):
     s.pop("transport", None)
     s.pop("controller", None)
     sess = s.get("session", {})
-    for k in ("dirty", "recentProjects", "recoveryAvailable", "recoverableCount"):
+    # `revision` is the monotonic mutation counter the agent loop uses to notice that the
+    # session moved under it (step-1 slice 6). It advances on every transaction AND on undo
+    # and redo, so a walk-back that restores the state perfectly still ends on a higher
+    # number — exactly like `dirty`. Its C++ twins strip it in the same spirit: the P6
+    # matrix canon() and agenttxn::volatilePaths().
+    for k in ("dirty", "recentProjects", "recoveryAvailable", "recoverableCount", "revision"):
         sess.pop(k, None)
 
     def rnd(x):

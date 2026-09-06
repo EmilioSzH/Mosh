@@ -1,0 +1,3 @@
+  ..   section "focused undo transaction coverage" completed in 0.003s (18 checks, 0 failed)
+===== 18/18 focused undo checks passed, 0 failed =====
+Cleaning up temp files..

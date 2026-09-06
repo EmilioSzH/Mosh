@@ -1,0 +1,70 @@
+# b6-three-undos — run-script: 11 command(s), 0 failure(s) — commit 0da6c638 — 2026-09-05
+# script:
+{"command":"create_track","args":{"name":"Vocal"},"capture":{"V":"trackId"}}
+{"command":"create_bus","args":{"name":"Reverb"},"capture":{"B":"busNumber","BT":"trackId"}}
+{"command":"add_send","args":{"trackId":"${V}","bus":"${B}","db":-12}}
+{"command":"set_track_volume","args":{"trackId":"${V}","db":-10}}
+{"command":"__snapshot","args":{"label":"base"}}
+{"command":"set_track_volume","args":{"trackId":"${V}","db":-13}}
+{"command":"set_send_level","args":{"trackId":"${V}","bus":"${B}","db":-18}}
+{"command":"__snapshot","args":{"label":"after_both"}}
+{"command":"undo","args":{}}
+{"command":"__wait","args":{"ms":200}}
+{"command":"__snapshot","args":{"label":"undo1"}}
+{"command":"undo","args":{}}
+{"command":"__wait","args":{"ms":200}}
+{"command":"__snapshot","args":{"label":"undo2"}}
+{"command":"undo","args":{}}
+{"command":"__wait","args":{"ms":200}}
+{"command":"__snapshot","args":{"label":"undo3"}}
+{"command":"save_as","args":{"file":"b6.mosh"}}
+{"command":"open_project","args":{"file":"b6.mosh"}}
+{"command":"__snapshot","args":{"label":"reopened"}}
+# parsed result lines:
+create_track: ok=True err= data={"trackId": "1010", "type": "audio", "isInstrument": false, "muteGateIndex": 0}
+create_bus: ok=True err= data={"busNumber": 0, "trackId": "1013", "name": "Reverb", "mpBusId": "ba3b5f79d08a4cdc830f25c3d6609745"}
+add_send: ok=True err= data={"bus": 0}
+set_track_volume: ok=True err= data=
+[snapshot base] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[{'bus': 0, 'db': -12.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+set_track_volume: ok=True err= data=
+set_send_level: ok=True err= data=
+[snapshot after_both] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -18.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+undo: ok=True err= data=true
+[snapshot undo1] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -18.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+undo: ok=True err= data=true
+[snapshot undo2] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-12.999998092651367 sends=[{'bus': 0, 'db': -18.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+undo: ok=True err= data=true
+[snapshot undo3] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[{'bus': 0, 'db': -18.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+save_as: ok=True err= data={"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/
+open_project: ok=True err= data={"editFile": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratch
+[snapshot reopened] master=-3.000000476837158 revision=n/a
+   track 1010 'Vocal' vol=-10.0 sends=[{'bus': 0, 'db': -12.0, 'mute': False, 'pan': 0.0, 'preFader': False}] plugins=['auxsend']
+   track 1013 'Reverb' vol=-2.384185791015625e-07 sends=[] plugins=['auxreturn']
+   buses=[{'bus': 0, 'name': 'Reverb', 'trackId': '1013'}]
+# txn stamps:
+1 create_track undoable adb8476c:1
+2 create_bus undoable adb8476c:2
+3 add_send undoable adb8476c:3
+4 set_track_volume undoable adb8476c:4
+5 set_track_volume undoable adb8476c:5
+6 set_send_level undoable adb8476c:6
+7 undo - adb8476c:5
+8 undo - adb8476c:7
+9 undo - adb8476c:4
+10 save_as - adb8476c:4
+11 open_project - adb8476c:0

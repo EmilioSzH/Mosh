@@ -35,6 +35,7 @@
 import type { Snapshot } from "../../types";
 import { buildLoopSystemPrompt } from "./loopPrompt";
 import { SYNTH_ROLE_LABEL, type ProduceTemplate } from "./produceTemplate";
+import { chordTonesForRoot, pcName, scaleForms, tonicPc } from "./produceCheck";
 
 // Deliberately EXPLICIT triggers — an ordinary "make me a beat" stays on the
 // bounded assistant lane; produce mode is asked for by name (or by asking for a
@@ -48,7 +49,7 @@ export function isProduceAsk(text: string): boolean {
 
 /** Bumped whenever PRODUCE_RULES changes; a promoted correction bumps it too
  *  (docs/produce-corrections/README.md's promotion workflow, step 2). */
-export const PRODUCE_VERSION = 3;
+export const PRODUCE_VERSION = 4;
 
 export const PRODUCE_BUDGETS = {
   maxSteps: 24,
@@ -175,13 +176,65 @@ export function renderProduceTemplate(template?: ProduceTemplate): string {
  *  template)`) before handing the closure to runAgentLoop as `systemPrompt` — the
  *  loop FSM itself only ever calls the 3-arg shape (loop.ts:99), so `template`
  *  omitted here is exactly that call site, not a degraded one. */
+
+// ── the sounding-root table (round 4) ────────────────────────────────────────
+//
+// WHY THIS EXISTS. The HARMONY rule above has said "stay consonant with whichever 808
+// pitch is SOUNDING at that instant" since v3, and it is followed poorly: measured over
+// the round-2 runs, 22-47% of chords/arp/counter/lead/stab notes clash with the sounding
+// root. Restating the rule harder is not the fix, because the rule is not the problem —
+// RECALL is. The 808 is written at step 2; chords land at step 4 and the arp at step 8,
+// so by then the model is being asked to remember an exact pitch timeline from several
+// turns ago while writing a new part.
+//
+// So stop asking it to remember. Once the 808 clip exists the snapshot carries its
+// notes, and this renders them back as an explicit table with the legal chord tones
+// already worked out. The theory comes from produceCheck's OWN helpers, deliberately:
+// if the prompt advised tones from a different model than the checker judges by, we
+// would be grading the model against advice we never gave it.
+//
+// Absent an 808 clip (steps 1-2, or any run where the bass has not landed) this renders
+// nothing and the prompt is byte-identical to v3.
+function soundingRootTable(snap: Snapshot | null, template?: ProduceTemplate): string {
+  if (!snap || !template?.bass?.trackId) return "";
+  const track = (snap.tracks ?? []).find((t) => String(t.id) === String(template.bass.trackId));
+  const clip = (track?.clips ?? []).find((c) => (c.notes?.length ?? 0) > 0);
+  const notes = clip?.notes;
+  if (!notes || notes.length === 0) return "";
+
+  const tonic = tonicPc(template.key.tonic);
+  const forms = scaleForms(template.key.mode);
+  const rows = [...notes]
+    .sort((a, b) => a.start - b.start)
+    .map((n) => {
+      const tones = [...chordTonesForRoot(n.pitch % 12, tonic, forms)].sort((a, b) => a - b);
+      const end = Math.round((n.start + n.length) * 100) / 100;
+      const legal = tones.length
+        ? tones.map(pcName).join(" ")
+        : "(chromatic root - no diatonic triad; keep other parts out of its way)";
+      return `  beats ${Math.round(n.start * 100) / 100}-${end}: root ${pcName(n.pitch)} (${n.pitch}) -> ${legal}`;
+    });
+
+  return [
+    "SOUNDING 808 ROOTS (already written - read this instead of recalling it). Every",
+    "chords_pad/arp/lead/counter/stab note must use one of the listed tones while that",
+    "span is sounding. Anything else is the clash the owner heard as 'wrong notes'.",
+    ...rows,
+  ].join("\n");
+}
+
 export function buildProduceSystemPrompt(
   snap: Snapshot | null,
   query?: string,
   memory?: string,
   template?: ProduceTemplate,
 ): string {
-  return [buildLoopSystemPrompt(snap, query, memory), PRODUCE_RULES, renderProduceTemplate(template)]
+  return [
+    buildLoopSystemPrompt(snap, query, memory),
+    PRODUCE_RULES,
+    renderProduceTemplate(template),
+    soundingRootTable(snap, template),
+  ]
     .filter(Boolean)
     .join("\n");
 }

@@ -1,0 +1,37 @@
+gen001-808-register | (file) | fail | 10 | False | external:~/AbletonMONSTER/flywheel-data/corrections/gen001_correction.meta.json | hist-compose
+mac-r0-001 | (file) | pass_with_notes | 7 | True | external:~/AbletonMONSTER/flywheel-data/corrections/mac_r0_001.meta.json (exter | hist-compose
+produce-r1-2026-09-02 | B-mosh-live3-sonnet.wav | (group) fail | 8 | True | ~/Library/Mosh/produce-ab/2026-09-02/round1-failed/live3-sonnet/mix.wav | compose
+produce-r1-2026-09-02 | B-labkit-live3-sonnet.wav | (group) fail | 8 | True | ~/Library/Mosh/produce-ab/2026-09-02/round1-failed/live3-sonnet/mix.wav | compose
+produce-r1-2026-09-02 | B-mosh-live4-opus.wav | (group) fail | 8 | True | ~/Library/Mosh/produce-ab/2026-09-02/round1-failed/live4-opus/mix.wav | compose
+produce-r1-2026-09-02 | B-labkit-live4-opus.wav | (group) fail | 8 | True | ~/Library/Mosh/produce-ab/2026-09-02/round1-failed/live4-opus/mix.wav | compose
+produce-r1-2026-09-02 | B-mosh-live5-sonnet.wav | (group) fail | 8 | True | ~/Library/Mosh/produce-ab/2026-09-02/round1-failed/live5-sonnet/mix.wav | compose
+produce-r1-2026-09-02 | B-labkit-live5-sonnet.wav | (group) fail | 8 | True | ~/Library/Mosh/produce-ab/2026-09-02/round1-failed/live5-sonnet/mix.wav | compose
+produce-r1-2026-09-02 | B-reference-notes-moshsounds.wav | (group) fail | 8 | True | AUDIO NOT FOUND | compose
+produce-r2-2026-09-02 | B-mosh-r2-opus-s3.wav | fail | 1 | True | ~/Library/Mosh/produce-ab/2026-09-02/round2-judged/r2-opus-s3/mix.wav | compose
+produce-r2-2026-09-02 | B-labkit-r2-opus-s3.wav | pass_with_notes | 1 | True | ~/Library/Mosh/produce-ab/2026-09-02/round2-judged/r2-opus-s3/mix.wav | compose
+produce-r2-2026-09-02 | B-mosh-r2-sonnet-s1c.wav | fail | 1 | True | ~/Library/Mosh/produce-ab/2026-09-02/round2-judged/r2-sonnet-s1c/mix.wav | compose
+produce-r2-2026-09-02 | B-labkit-r2-sonnet-s1c.wav | fail | 1 | True | ~/Library/Mosh/produce-ab/2026-09-02/round2-judged/r2-sonnet-s1c/mix.wav | compose
+produce-r2-2026-09-02 | B-mosh-r2-sonnet-s2.wav | fail | 1 | True | ~/Library/Mosh/produce-ab/2026-09-02/round2-judged/r2-sonnet-s2/mix.wav | compose
+produce-r2-2026-09-02 | B-labkit-r2-sonnet-s2.wav | fail | 1 | True | ~/Library/Mosh/produce-ab/2026-09-02/round2-judged/r2-sonnet-s2/mix.wav | compose
+produce-r3-2026-09-02 | B-mosh-r3-opus-s3-kitmatched.wav | pass_with_notes | 1 | True | ~/Library/Mosh/produce-ab/2026-09-02/round3-flawed/r3-opus-s3-kitmatched/mix.wav | compose
+produce-r3-2026-09-02 | B-mosh-r3-opus-s3-labkit.wav | pass_with_notes | 1 | True | ~/Library/Mosh/produce-ab/2026-09-02/round3-flawed/r3-opus-s3-labkit/mix.wav | compose
+produce-r3-2026-09-02 | B-mosh-r3c-opus-s3-kitmatched.wav | pass_with_notes | 1 | True | ~/Library/Mosh/produce-ab/2026-09-02/B-mosh-r3c-opus-s3-kitmatched.wav | compose
+produce-r3-2026-09-02 | B-mosh-r3c-opus-s3-labkit.wav | pass | 0 | True | ~/Library/Mosh/produce-ab/2026-09-02/B-mosh-r3c-opus-s3-labkit.wav | compose
+produce-r4-2026-09-04 | B-mosh-r4-opus-s1.wav | fail | 1 | True | ~/Library/Mosh/produce-ab/2026-09-04/B-mosh-r4-opus-s1.wav | compose
+produce-r4-2026-09-04 | B-mosh-r4-opus-s2.wav | fail | 1 | True | ~/Library/Mosh/produce-ab/2026-09-04/B-mosh-r4-opus-s2.wav | compose
+produce-r4-2026-09-04 | B-mosh-r4-sonnet-s3.wav | fail | 1 | True | ~/Library/Mosh/produce-ab/2026-09-04/B-mosh-r4-sonnet-s3.wav | compose
+--- verdict.json rows ---
+2026-09-02 verdict-r2.json [('B-mosh-r2-opus-s3.wav', 'fail'), ('B-labkit-r2-opus-s3.wav', 'pass_with_notes'), ('B-mosh-r2-sonnet-s1c.wav', 'fail'), ('B-labkit-r2-sonnet-s1c.wav', 'fail'), ('B-mosh-r2-sonnet-s2.wav', 'fail'), ('B-labkit-r2-sonnet-s2.wav', 'fail')]
+2026-09-02 verdict.json [('B-mosh-r3c-opus-s3-kitmatched.wav', None), ('B-mosh-r3c-opus-s3-labkit.wav', None)]
+2026-09-04 verdict.json [('B-mosh-r4-opus-s1.wav', 'fail'), ('B-mosh-r4-opus-s2.wav', 'fail'), ('B-mosh-r4-sonnet-s3.wav', 'fail')]
+--- produce-ab tree ---
+2026-09-02/partial-runs ['live1-sonnet', 'live2-sonnet', 'r2-sonnet-s1-shim-timeout', 'r2-sonnet-s1b-killed-by-me', 'smoke1', 'smoke2']
+2026-09-02/round1-failed ['fixture-replay', 'live3-sonnet', 'live4-opus', 'live5-sonnet']
+2026-09-02/round2-judged ['r2-opus-s3', 'r2-sonnet-s1c', 'r2-sonnet-s2']
+2026-09-02/round3-flawed ['r3-opus-s3-kitmatched', 'r3-opus-s3-labkit', 'r3b-opus-s3-kitmatched', 'r3b-opus-s3-labkit']
+2026-09-02/runs ['app.log', 'app.pid', 'build-hpfix.log', 'build-r33cleanup-2.log', 'build-r33cleanup.log', 'r3b-render.log', 'r3b-render.sh', 'r3c-chain.sh', 'r3c-opus-s3-kitmatched', 'r3c-opus-s3-labkit', 'r3c-render.log', 'r3c-render.sh', 'rebuild-chain.log', 'rebuild-chain.sh']
+2026-09-04/runs ['app.log', 'app.pid', 'r4-opus-s1', 'r4-opus-s2', 'r4-sonnet-s3', 'r4.log', 'r4.sh']
+2026-09-02/round1-failed/fixture-replay ['mix.wav', 'replay-result.json', 'swap-program.jsonl', 'template.json']
+2026-09-02/round1-failed/live3-sonnet ['audio', 'brain-replies.jsonl', 'mix.wav', 'produce-live3-sonnet-sonnet.mosh', 'program.jsonl', 'run.json', 'swap', 'template.json', 'transcript.json']
+2026-09-02/round1-failed/live4-opus ['audio', 'brain-replies.jsonl', 'mix.wav', 'produce-live4-opus-opus.mosh', 'program.jsonl', 'run.json', 'swap', 'template.json', 'transcript.json']
+2026-09-02/round1-failed/live5-sonnet ['audio', 'brain-replies.jsonl', 'mix.wav', 'produce-live5-sonnet-sonnet.mosh', 'program.jsonl', 'run.json', 'swap', 'template.json', 'transcript.json']

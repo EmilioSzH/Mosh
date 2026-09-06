@@ -25,6 +25,26 @@ import { useStore } from "../store";
 import type { CommandResult, Snapshot, Track } from "../types";
 import { __resetDefaultStudioSkillRuntimeForTestsV1, clearDefaultStudioSkillContinuationsV1 } from "../agent/skillFoundry/runtime";
 
+// Step-1 brief, slice 2 — the loop gate + loop runner are mocked exactly as
+// AgentComposer.skillFoundry.test.ts mocks them, so the "add a …" fall-through below can
+// prove where the turn ENDS (the router's verdict) without a model call. `allowed`
+// defaults to false, which is the packaged posture (VITE_MOSH_ENABLE_EXPERIMENTAL_AGENT_LOOP
+// unset), so every pre-existing test in this file sees byte-identical behaviour.
+const loopControls = vi.hoisted(() => ({
+  allowed: false,
+  calls: [] as string[],
+  reset() { this.allowed = false; this.calls = []; },
+}));
+
+vi.mock("../agent/loop/runTask", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../agent/loop/runTask")>();
+  return {
+    ...actual,
+    loopAllowed: () => loopControls.allowed,
+    runLoopTask: async (text: string) => { loopControls.calls.push(text); },
+  };
+});
+
 import { AgentComposer } from "./AgentComposer";
 
 const SNAPSHOT: Snapshot = {
@@ -166,6 +186,7 @@ describe("AgentComposer named plug-in skill", () => {
     // (mocked-runtime) timing.
     __resetDefaultStudioSkillRuntimeForTestsV1();
     await clearDefaultStudioSkillContinuationsV1();
+    loopControls.reset();
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -220,8 +241,9 @@ describe("AgentComposer named plug-in skill", () => {
     act(() => setInputValue(input, "can you load serum 2?"));
     await act(async () => send.click());
 
-    expect(exec).toHaveBeenCalledWith("list_plugins", {}, undefined);
-    expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "serum-2" }, expect.any(Object));
+    // Step-1 slice 6 — the skill environment's exec names its lane on the envelope.
+    expect(exec).toHaveBeenCalledWith("list_plugins", {}, undefined, "studio_skill");
+    expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "serum-2" }, expect.any(Object), "studio_skill");
     expect(exec.mock.calls.map(([command]) => command)).toEqual([
       "list_plugins",
       "batch_begin",
@@ -251,7 +273,7 @@ describe("AgentComposer named plug-in skill", () => {
 
     act(() => setInputValue(input, "2"));
     await act(async () => send.click());
-    expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "serum-vst3" }, expect.any(Object));
+    expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "serum-vst3" }, expect.any(Object), "studio_skill");
     expect(host.querySelector("[role=status]")?.textContent).toBe("Done.");
   });
 
@@ -287,5 +309,110 @@ describe("AgentComposer named plug-in skill", () => {
       source: "studio_skill_blocked",
     });
     expect(host.querySelector("[role=status]")?.textContent).toContain("open Plug-in Manager or rescan");
+  });
+
+  // Step-1 brief, slice 2 — the "add a …" hijack (MOSHI-EDIT-PROBE-2026-09-04 seq 286).
+  // At baseline the owner machine's 1,198-entry list_plugins result tripped the handler's
+  // 64-entry cap, the turn ended as studio_skill_blocked ("the plug-in catalog returned
+  // invalid or oversized data") and the router was never consulted. The composer's
+  // precedence is unchanged (skill runtime first, router last); what changes is that a
+  // no-match add/insert/put now yields `unsupported`, which is the ONE outcome
+  // finishSkillOutcome declines to handle, so the turn reaches routeAsk.
+  describe("\"add a …\" with no catalog match falls through to the router", () => {
+    const realMachineCatalog = (): FakePlugin[] =>
+      Array.from({ length: 1_198 }, (_, i) => ({ id: `p${i}`, name: `Plugin ${i}`, format: "VST3", manufacturer: `Vendor ${i % 37}`, isInstrument: i % 2 === 0 }));
+
+    async function send(text: string): Promise<void> {
+      const input = host.querySelector<HTMLInputElement>("[data-testid=agent-input]");
+      const button = host.querySelector<HTMLButtonElement>("[data-testid=agent-send]");
+      if (!input || !button) throw new Error("Ask Moshi controls are missing");
+      act(() => setInputValue(input, text));
+      await act(async () => button.click());
+    }
+
+    it("loop gate off: ends as studio_skill_unsupported (the router's verdict), never studio_skill_blocked", async () => {
+      engine.plugins = realMachineCatalog();
+      loopControls.allowed = false;
+      await send("add a counter phrase");
+
+      expect(exec.mock.calls.map(([command]) => command)).toEqual(["list_plugins", "batch_begin", "batch_end"]);
+      const begin = exec.mock.calls.find(([command]) => command === "batch_begin");
+      expect(begin?.[1]).toMatchObject({ utterance: "add a counter phrase", source: "studio_skill_unsupported" });
+      expect(exec.mock.calls.some(([, args]) => (args as { source?: string } | undefined)?.source === "studio_skill_blocked")).toBe(false);
+      expect(host.querySelector("[role=status]")?.textContent).toBe("I can't do that reliably yet.");
+      expect(engine.tracks[0]?.plugins ?? []).toHaveLength(0);
+    });
+
+    it("loop gate on: the router routes the probe ask to the loop and no studio_skill_blocked line is written", async () => {
+      engine.plugins = realMachineCatalog();
+      loopControls.allowed = true;
+      await send("add a counter phrase");
+
+      expect(loopControls.calls).toEqual(["add a counter phrase"]);
+      expect(exec.mock.calls.map(([command]) => command)).toEqual(["list_plugins"]);
+      expect(engine.tracks[0]?.plugins ?? []).toHaveLength(0);
+    });
+
+    it("loop gate on: an imperative edit phrased with \"add\" reaches the loop through the same fall-through", async () => {
+      engine.plugins = realMachineCatalog();
+      loopControls.allowed = true;
+      await send("add more reverb on the vocal");
+
+      expect(loopControls.calls).toEqual(["add more reverb on the vocal"]);
+      expect(exec.mock.calls.map(([command]) => command)).toEqual(["list_plugins"]);
+    });
+
+    it("\"add <installed plug-in>\" keeps its deterministic owner: loaded once, router never consulted", async () => {
+      engine.plugins = [...realMachineCatalog(), { id: "ott", name: "OTT", format: "VST3", manufacturer: "Xfer Records", isInstrument: false }];
+      loopControls.allowed = true;
+      await send("add OTT");
+
+      expect(loopControls.calls).toEqual([]);
+      // Fourth argument = the `origin` sibling the studio-skill environment passes (slice 6).
+      expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "ott" }, expect.any(Object), "studio_skill");
+      expect(exec.mock.calls.filter(([command]) => command === "load_plugin")).toHaveLength(1);
+      expect(host.querySelector("[role=status]")?.textContent).toBe("Done.");
+    });
+
+    // Verifier finding (2026-09-05), MAJOR: with nothing selected the handler's
+    // select-a-track guard ran before the catalog read, so this same ask ended
+    // studio_skill_blocked and the router was never consulted.
+    it("loop gate on, no track selected: the no-match ask still reaches the loop, never studio_skill_blocked", async () => {
+      engine.plugins = realMachineCatalog();
+      loopControls.allowed = true;
+      useStore.setState({ selectedTrackId: null });
+      await send("add a counter phrase");
+
+      expect(loopControls.calls).toEqual(["add a counter phrase"]);
+      expect(exec.mock.calls.map(([command]) => command)).toEqual(["list_plugins"]);
+      expect(exec.mock.calls.some(([, args]) => (args as { source?: string } | undefined)?.source === "studio_skill_blocked")).toBe(false);
+      expect(engine.tracks[0]?.plugins ?? []).toHaveLength(0);
+    });
+
+    it("no track selected + \"add <installed plug-in>\": the select-a-track guidance is unchanged and the router is never consulted", async () => {
+      engine.plugins = [...realMachineCatalog(), { id: "ott", name: "OTT", format: "VST3", manufacturer: "Xfer Records", isInstrument: false }];
+      loopControls.allowed = true;
+      useStore.setState({ selectedTrackId: null });
+      await send("add OTT");
+
+      expect(loopControls.calls).toEqual([]);
+      expect(exec.mock.calls.map(([command]) => command)).toEqual(["list_plugins", "batch_begin", "batch_end"]);
+      const begin = exec.mock.calls.find(([command]) => command === "batch_begin");
+      expect(begin?.[1]).toMatchObject({ utterance: "add OTT", source: "studio_skill_blocked" });
+      expect(host.querySelector("[role=status]")?.textContent).toBe("Select the track you want me to load it on.");
+      expect(engine.tracks[0]?.plugins ?? []).toHaveLength(0);
+    });
+
+    // Verifier finding (2026-09-05), MINOR: a single part word inside an installed plug-in
+    // name was claimed through the substring rank and a load transaction opened.
+    it("loop gate on: \"add a harmony\" with Waves Harmony Mono installed reaches the loop, no load transaction", async () => {
+      engine.plugins = [...realMachineCatalog(), { id: "waves-harmony-mono", name: "Waves Harmony Mono", format: "VST3", manufacturer: "Waves", isInstrument: false }];
+      loopControls.allowed = true;
+      await send("add a harmony");
+
+      expect(loopControls.calls).toEqual(["add a harmony"]);
+      expect(exec.mock.calls.map(([command]) => command)).toEqual(["list_plugins"]);
+      expect(engine.tracks[0]?.plugins ?? []).toHaveLength(0);
+    });
   });
 });

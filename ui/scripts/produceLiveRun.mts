@@ -60,6 +60,7 @@ import { RENDER_JOB_COMMANDS, awaitRendersSettled } from "../src/agent/loop/jobW
 import { runAgentLoop, type ChatMessage, type LoopProgressEvent } from "../src/agent/loop/loop";
 import { mockLoopChat } from "../src/agent/loop/loopBrainMock";
 import { PRODUCE_BUDGETS, buildProduceSystemPrompt } from "../src/agent/loop/producePrompt";
+import { produceBatchBeginArgs } from "../src/agent/loop/produceBatchArgs";
 import type { AgentEnv, StepCommandResult } from "../src/agent/loopSeam";
 // `import type` is erased at runtime (esbuild/vite-node drop it entirely, no
 // module resolution attempted) — safe even on a worktree where W2.5 hasn't
@@ -287,8 +288,11 @@ function makeLocalTaskExecutor(client: CompanionClient, label: string, meta: { u
 
   async function ensureOpen(): Promise<void> {
     if (opened) return;
-    const args: Record<string, unknown> = { name: label, turn_id: newTurnId(), source: meta.source ?? "agent_loop" };
-    if (meta.utterance) args.utterance = meta.utterance;
+    // Step-1 slice 6 — the marker also names this RUN and the produce prompt version
+    // (produceBatchArgs.ts); the existing keys keep their exact order.
+    const args = produceBatchBeginArgs({
+      label, turnId: newTurnId(), source: meta.source, utterance: meta.utterance, runId: RUN_ID,
+    });
     let begin = await client.command("batch_begin", args, { timeoutMs: TIMEOUT_MS });
     if (!begin.ok && /already open/i.test(begin.error ?? "")) {
       await client.command("batch_end", {}, { timeoutMs: TIMEOUT_MS }); // heal a zombie batch, retry once

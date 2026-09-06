@@ -625,6 +625,7 @@ async function runAtomicallyV1(
       postAfterContext = environment.context();
       return verifyPostconditionsV1(manifest, { ...preflight, before }, after, postAfterContext);
     },
+    provenance: environment.provenance, // step-1 slice 6 — the turn's turn_id/source/utterance
   };
 
   const result = await runAtomicSkillPlanV1(plan, { snapshot: environment.snapshot, exec: environment.exec, guard });

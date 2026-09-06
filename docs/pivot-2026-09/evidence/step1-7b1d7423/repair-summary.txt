@@ -1,0 +1,23 @@
+# Repair cycle after the first independent audit (FAIL: 10/12 supported, 3/8 safety).
+# Commits on top of the audited 367d0d8e:
+#   35db5f79 deterministic balance lane (articles, relative moves, sends, another N dB, fader tolerance)
+#   8ec622ce audit-derived composer cases
+#   3274d0d9 unresolvable NAMED target hands the turn back; four verifier-found rules pinned
+#   7b1d7423 brief bookkeeping (skills.ts in slice 5; the fall-through rule)
+# Verification of the cycle: 2 lenses, neither blocking; their majors are addressed by 3274d0d9.
+
+# UI suite at 7b1d7423: 455 files / 4664 passed, 1 skipped; typecheck clean.
+# RED proof for the fall-through pin (pre-fix explicitBalance.ts, same tests):
+#   FAIL 'a dB ask whose named target is not a track falls through to the loop instead of dead-ending' (1 failed | 30 passed)
+
+# Deterministic-lane behaviour at 7b1d7423 (matcher, run directly):
+"set the vocal to -13 dB" -> {"action":"set_level","trackName":"the vocal","db":-13}
+"lower the vocal 3 dB" -> {"action":"adjust_level","trackName":"the vocal","db":-3}
+"turn the drums down 2 dB" -> {"action":"adjust_level","trackName":"the drums","db":-2}
+"another 3 dB" -> {"action":"repeat_last","db":3}
+"set the vocal reverb send to -18 dB" -> {"action":"send_level","trackName":"the vocal","bus":"reverb","mode":"absolute","db":-18}
+"more reverb on the vocal" -> {"action":"send_level","trackName":"the vocal","bus":"reverb","mode":"relative","db":3}
+"less reverb on the vocal by 6 dB" -> {"action":"send_level","trackName":"the vocal","bus":"reverb","mode":"relative","db":-6}
+"boost the highs 3 dB" -> {"action":"adjust_level","trackName":"the highs","db":3}
+"bring everything down 3 dB" -> null
+"drop the drums 3 dB then bring the vocal up 1 dB" -> null

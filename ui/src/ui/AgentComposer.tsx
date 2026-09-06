@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useStore } from "../store";
-import { runAgentBatch, logAgentTurn } from "../agent/executor";
+import { runAgentBatch, logAgentTurn, newTurnId } from "../agent/executor";
 import { matchFastPath } from "../agent/fastPath";
 import { handleFast } from "../agent/performer";
 import { writePreference } from "../agent/memory/writePreference";
@@ -58,6 +58,11 @@ export function AgentComposer() {
   // `refresh`/`recording` are new — required by `StudioSkillEnvironmentV1` (contracts.ts)
   // but never used by the pre-Task-7 composer, which only ever reached load-named-plugin.
   const buildSkillEnvironment = (text: string): StudioSkillEnvironmentV1 => ({
+    // Step-1 slice 6 — this environment serves ONE turn: a fresh turn_id per run(text), the
+    // lane as `source` (the same string `exec` below puts on every envelope), and the
+    // verbatim ask. The atomic skill runner forwards it into batch_begin's args, so the
+    // engine stamps turn_id on every JSONL line of the transaction.
+    provenance: { turn_id: newTurnId(), source: "studio_skill", utterance: text },
     context: () => {
       const current = useStore.getState();
       return {
@@ -74,7 +79,9 @@ export function AgentComposer() {
       if (!snap) throw new Error("no session snapshot available");
       return snap;
     },
-    exec: (command, args, transaction) => useStore.getState().exec(command, args, transaction),
+    // Step-1 slice 6 — every command a studio skill runs names its lane on the envelope
+    // (store.exec's fourth argument ⇒ the `origin` sibling MoshOps stamps on the JSONL).
+    exec: (command, args, transaction) => useStore.getState().exec(command, args, transaction, "studio_skill"),
     readSourceStatus: readSkillSourceStatusV1,
     runBatch: (label, calls) => runAgentBatch(label, calls, { utterance: text, source: "studio_skill" }),
     refresh: () => useStore.getState().refresh(),

@@ -11,6 +11,11 @@ product-acceptance claim.
 
 The upcoming product direction is deliberately undefined here.
 
+> **2026-09-07:** the direction is now defined by the owner's recording + mixing pivot — see
+> [CONTRACT-AMENDMENT-2026-09-07.md](CONTRACT-AMENDMENT-2026-09-07.md) and
+> [pivot-2026-09/CAPABILITY-AUDIT-2026-09-05.md](pivot-2026-09/CAPABILITY-AUDIT-2026-09-05.md).
+> This snapshot remains the pre-pivot baseline record and is not rewritten.
+
 ## What is on the selected baseline
 
 The following product work was rebased, gated, and merged serially into main:

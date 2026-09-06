@@ -10,8 +10,35 @@ const CASES: Array<[string, "single" | "loop"]> = [
   // stays single: one clear move the deterministic lanes above already own
   ["mute the vocal", "single"],
   ["pan the keys a bit right", "single"],
-  ["drop the drums 3 dB", "single"],
   ["split the 808 clip at bar 3", "single"],
+  // FLIPPED single → loop (step-1 brief, 2026-09-05). No deterministic lane owns a
+  // RELATIVE dB move today: explicit-balance claims only the absolute "set X to N dB"
+  // (matchExplicitBalanceUtteranceV1 returns null for "lower/turn … 3 dB"), and
+  // fastPath's RULES table has no dB rule. "single" here was therefore a refusal
+  // before any model call, not a cheaper owner. Re-flip only when a lane above the
+  // router actually claims relative dB moves.
+  ["drop the drums 3 dB", "loop"],
+  // imperative single-clause mix edits → loop (step-1 brief, slice 1). The first five
+  // are the asks typed into the 2026-09-04 GUI probe (MOSHI-EDIT-PROBE seq 278–286);
+  // the rest are the capability audit's balance forms. Every one printed "single" at
+  // baseline and ended the turn as "I can't do that reliably yet."
+  ["turn the clap down 3 dB", "loop"],
+  ["sustain the stabs", "loop"],
+  ["make the B section darker", "loop"],
+  ["halve the hats in bar 7", "loop"],
+  ["add a counter phrase", "loop"], // composing a new part: clip + notes + key, like "write a bassline"
+  ["lower the vocal 3 dB", "loop"],
+  ["more reverb on the vocal", "loop"],
+  ["can you lower the vocal 3 dB", "loop"], // polite prefix does not change the class
+  ["please tighten the hats", "loop"],
+  ["hey moshi, brighten the keys", "loop"],
+  ["less delay on the keys", "loop"],
+  ["make the keys quieter", "loop"], // comparative taste word; "keys" is not a creative object
+  ["the vocal is 3 dB too loud, fix it", "loop"], // brief S12 — the dB token alone carries it
+  // questions stay single — answered or declined, never planned. "what is the tempo"
+  // routed to loop at baseline via TEMPO_WORD; a question is never a tempo edit.
+  ["is the vocal too loud", "single"],
+  ["what is the tempo", "single"],
   // sequential clauses → loop
   ["mute the vocal then duck the drums", "loop"],
   ["set 90 bpm; lay a boom bap groove", "loop"],

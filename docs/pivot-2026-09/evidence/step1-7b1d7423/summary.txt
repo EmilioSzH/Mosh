@@ -1,0 +1,40 @@
+candidate 7b1d742382316a47f9a686a1b021067c8773d103
+binary mtime: Sep  5 23:17:49 2026
+binary newer than changed sources: yes
+build log build-fix3.log: 0 CXX compiles; failures: 0
+=== selftest ===
+selftest rc=0  ===== 3537/3537 checks passed, 0 failed =====
+--- STEP1-PROV: origin + turn_id on JSONL lines; session.revision ---
+  ok   STEP1-PROV session.revision is present in the snapshot
+  ok   STEP1-PROV native set_track_volume ok
+  ok   STEP1-PROV session.revision increased across set_track_volume
+  ok   STEP1-PROV origin-stamped set_track_volume ok
+  ok   STEP1-PROV executeFromUi set_track_volume ok
+=== selftest-undo ===
+selftest-undo rc=0  ===== 18/18 focused undo checks passed, 0 failed =====
+=== repro (pumped script from docs) ===
+repro rc=0 run-script: 16 command(s), 0 failure(s)
+[base] revision=6 vol=-10.0 sends=[(0, -12.0)]
+[after_fader] revision=7 vol=-12.999998092651367 sends=[(0, -12.0)]
+[after_send] revision=8 vol=-12.999998092651367 sends=[(0, -18.0)]
+[undo_send_immediate] revision=9 vol=-12.999998092651367 sends=[(0, -12.0)]
+[undo_send_pumped] revision=9 vol=-12.999998092651367 sends=[(0, -12.0)]
+[undo_fader] revision=10 vol=-10.0 sends=[(0, -12.0)]
+[reopened] revision=10 vol=-10.0 sends=[(0, -12.0)]
+=== harness JSONL provenance stamps ===
+1 create_track undoable fe84ee26:1 origin=native turn=None
+2 import_clip undoable fe84ee26:2 origin=native turn=None
+3 create_bus undoable fe84ee26:3 origin=native turn=None
+4 load_builtin undoable fe84ee26:4 origin=native turn=None
+5 add_send undoable fe84ee26:5 origin=native turn=None
+6 set_track_volume undoable fe84ee26:6 origin=native turn=None
+7 export_audio - fe84ee26:6 origin=native turn=None
+8 batch_begin - fe84ee26:6 origin=native turn=probe-1
+9 set_track_volume undoable fe84ee26:7 origin=native turn=probe-1
+10 batch_end - fe84ee26:7 origin=native turn=probe-1
+11 set_send_level undoable fe84ee26:8 origin=native turn=None
+12 undo - fe84ee26:7 origin=native turn=None
+13 undo - fe84ee26:6 origin=native turn=None
+14 export_audio - fe84ee26:6 origin=native turn=None
+15 save_as - fe84ee26:9 origin=native turn=None
+16 open_project - fe84ee26:0 origin=native turn=None

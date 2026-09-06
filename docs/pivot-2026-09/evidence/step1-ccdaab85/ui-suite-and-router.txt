@@ -1,0 +1,17 @@
+# UI suite at ccdaab85 (vitest run, 2026-09-05 19:20): Test Files 1 failed | 454 passed | 1 skipped (456); Tests 1 failed | 4609 passed | 1 skipped (4611)
+# the single failure, src/skillFoundry/processSupervisor.test.ts 'runs a fast-exiting child…', passes alone (6/6) — load-flaky, untouched by the candidate
+# typecheck (tsc --noEmit && tsc -p tsconfig.e2e.json): clean
+# routeAsk at ccdaab85:
+"turn the clap down 3 dB" -> loop
+"sustain the stabs" -> loop
+"make the B section darker" -> loop
+"halve the hats in bar 7" -> loop
+"add a counter phrase" -> loop
+"lower the vocal 3 dB" -> loop
+"more reverb on the vocal" -> loop
+"drop the drums 3 dB" -> loop
+"is the vocal too loud" -> single
+"what is the tempo" -> single
+"mute the vocal" -> single
+"pan the keys a bit right" -> single
+"split the 808 clip at bar 3" -> single

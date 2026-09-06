@@ -926,6 +926,7 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
                 auto sessVar = o->getProperty ("session");   // bind: the var temporary would die
                 if (auto* sess = sessVar.getDynamicObject())
                 {
+                    sess->removeProperty ("revision");    // step-1 slice 6: monotonic, advances on every jump
                     sess->removeProperty ("metronome");
                     // …and `click`, which CAP-TRN-005 added as the full click block. It
                     // carries `enabled` off the SAME te::Edit::clickTrackEnabled flag that
@@ -1283,6 +1284,123 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
     check (provEmpty.isObject(), "AGT-PROV the UNSERVED ask reached the JSONL despite zero commands");
     check (provEmpty.getProperty ("args", var()).getProperty ("utterance", var()).toString() == provEmptyAsk,
            "AGT-PROV the unserved ask's utterance is recoverable (the missing-skill signal)");
+
+    // ─── STEP1-PROV (step-1 slice 6): origin + turn_id on every JSONL line; session.revision ─
+    // Every line MoshOps::logLine writes now carries a top-level `origin` — the envelope's
+    // "origin" sibling when one is given, else "ui" for a call through executeFromUi, else
+    // "native" — and, from batch_begin through batch_end inclusive, the batch's `turn_id`
+    // as a SIBLING (never inside the in-batch commands' args, which the AGT-PROV section
+    // above keeps pinning as untouched). session.revision exposes editRevision_ so the
+    // loop can bind a planned step to the session it observed. Hermetic: every edit here
+    // is undone, so Stage 2 sees the same state AGT-PROV left.
+    section ("STEP1-PROV: origin + turn_id on JSONL lines; session.revision");
+    {
+        auto s1Log = eng.sessionDir().getChildFile ("mosh-log.jsonl");
+        const int s1LinesBefore = StringArray::fromLines (s1Log.loadFileAsString()).size();
+        const auto s1TrackId = firstTrack (ops).getProperty ("id", var()).toString();
+        const double s1Vol0  = (double) firstTrack (ops).getProperty ("volumeDb", 0.0);
+        auto s1Revision = [&] () -> juce::int64
+        {
+            return (juce::int64) ops.snapshot()["session"].getProperty ("revision", var ((juce::int64) -1));
+        };
+        auto s1Volume = [&] (double db) { return objN ({ { "trackId", s1TrackId }, { "db", db } }); };
+
+        // (d) session.revision: present, and strictly increasing across a mutation.
+        const auto rev0 = s1Revision();
+        check (rev0 >= 0, "STEP1-PROV session.revision is present in the snapshot");
+
+        // (a) a plain ops.execute — no envelope origin ⇒ "native".
+        check (ok (cmd (ops, "set_track_volume", s1Volume (-7.25))), "STEP1-PROV native set_track_volume ok");
+        const auto rev1 = s1Revision();
+        check (rev1 > rev0, "STEP1-PROV session.revision increased across set_track_volume");
+
+        // (b) an envelope carrying an "origin" sibling beside command/args.
+        { auto* c = new DynamicObject();
+          c->setProperty ("command", "set_track_volume");
+          c->setProperty ("args", s1Volume (-8.25));
+          c->setProperty ("origin", "agent_loop");
+          check (ok (ops.execute (var (c))), "STEP1-PROV origin-stamped set_track_volume ok"); }
+
+        // (b') the WebView path with no envelope origin ⇒ the engine names it "ui".
+        { auto* c = new DynamicObject();
+          c->setProperty ("command", "set_track_volume");
+          c->setProperty ("args", s1Volume (-9.25));
+          check (ok (ops.executeFromUi (var (c))), "STEP1-PROV executeFromUi set_track_volume ok"); }
+
+        // (c) a batch with a turn_id: every line inside carries it; the next line after does not.
+        check (ok (cmd (ops, "batch_begin", objN ({ { "name", "prov turn" }, { "turn_id", "t-1" }, { "source", "agent_loop" } }))),
+               "STEP1-PROV batch_begin{turn_id} ok");
+        check (ok (cmd (ops, "set_track_volume", s1Volume (-10.25))), "STEP1-PROV in-batch set_track_volume ok");
+        check (ok (cmd (ops, "batch_end")), "STEP1-PROV batch_end ok");
+        check (ok (cmd (ops, "set_track_volume", s1Volume (-11.25))), "STEP1-PROV post-batch set_track_volume ok");
+
+        // (d) undo moves the revision too.
+        const auto revBeforeUndo = s1Revision();
+        check (ok (cmd (ops, "undo")), "STEP1-PROV undo ok");
+        check (s1Revision() > revBeforeUndo, "STEP1-PROV session.revision increased across undo");
+
+        // Hermetic: unwind the remaining four edits (the -10.25 batch, -9.25, -8.25, -7.25).
+        for (int i = 0; i < 4; ++i) cmd (ops, "undo");
+        check (std::abs ((double) firstTrack (ops).getProperty ("volumeDb", 0.0) - s1Vol0) < 0.01,
+               "STEP1-PROV every edit undone — the fader is back where it started");
+
+        // Read the lines this section wrote back off disk.
+        var lNative, lAgent, lUi, lBegin, lInner, lEnd, lAfter, lUndo;
+        {
+            auto lines = StringArray::fromLines (s1Log.loadFileAsString());
+            for (int i = jmax (0, s1LinesBefore - 1); i < lines.size(); ++i)
+            {
+                const auto l = lines[i].trim();
+                if (l.isEmpty()) continue;
+                const auto row = JSON::parse (l);        // named local — the var-temporary UAF class
+                if (! row.isObject()) continue;
+                const auto rowCommand = row.getProperty ("command", var()).toString();
+                const auto rowArgs    = row.getProperty ("args", var());
+                if (rowCommand == "set_track_volume")
+                {
+                    const double db = (double) rowArgs.getProperty ("db", 0.0);
+                    if (std::abs (db + 7.25)  < 0.001) lNative = row;
+                    if (std::abs (db + 8.25)  < 0.001) lAgent  = row;
+                    if (std::abs (db + 9.25)  < 0.001) lUi     = row;
+                    if (std::abs (db + 10.25) < 0.001) lInner  = row;
+                    if (std::abs (db + 11.25) < 0.001) lAfter  = row;
+                }
+                else if (rowCommand == "batch_begin" && rowArgs.getProperty ("turn_id", var()).toString() == "t-1")
+                    lBegin = row;
+                else if (rowCommand == "batch_end" && lBegin.isObject() && ! lEnd.isObject())
+                    lEnd = row;
+                else if (rowCommand == "undo" && lAfter.isObject() && ! lUndo.isObject())
+                    lUndo = row;
+            }
+        }
+        auto originOf = [] (const var& row) { return row.getProperty ("origin", var()).toString(); };
+        auto turnOf   = [] (const var& row) { return row.getProperty ("turn_id", var()).toString(); };
+
+        check (lNative.isObject() && originOf (lNative) == "native",
+               "STEP1-PROV a plain ops.execute line carries origin \"native\"");
+        check (lNative.isObject() && ! lNative.hasProperty ("turn_id"),
+               "STEP1-PROV a line outside any batch carries NO turn_id (absent, not empty)");
+        check (lAgent.isObject() && originOf (lAgent) == "agent_loop",
+               "STEP1-PROV the envelope's origin sibling is stamped verbatim (agent_loop)");
+        check (lAgent.isObject() && ! lAgent.getProperty ("args", var()).hasProperty ("origin"),
+               "STEP1-PROV origin rides beside args, never inside them");
+        check (lUi.isObject() && originOf (lUi) == "ui",
+               "STEP1-PROV an executeFromUi line with no envelope origin carries origin \"ui\"");
+        check (lBegin.isObject() && turnOf (lBegin) == "t-1",
+               "STEP1-PROV batch_begin carries turn_id as a SIBLING (not only inside args)");
+        check (lInner.isObject() && turnOf (lInner) == "t-1",
+               "STEP1-PROV every line inside the batch carries the batch's turn_id");
+        check (lInner.isObject() && ! lInner.getProperty ("args", var()).hasProperty ("turn_id"),
+               "STEP1-PROV the in-batch command's args stay untouched (turn_id is a sibling)");
+        check (lEnd.isObject() && turnOf (lEnd) == "t-1",
+               "STEP1-PROV batch_end closes the turn carrying its turn_id");
+        check (lAfter.isObject() && ! lAfter.hasProperty ("turn_id"),
+               "STEP1-PROV the first line after batch_end carries NO turn_id");
+        check (lAfter.isObject() && originOf (lAfter) == "native",
+               "STEP1-PROV origin is stamped on lines outside a batch too");
+        check (lUndo.isObject() && originOf (lUndo) == "native" && ! lUndo.hasProperty ("turn_id"),
+               "STEP1-PROV undo lines carry origin and no turn_id");
+    }
 
     // ─── Stage 2: arrangement editing + mixer stub ───
     section ("Stage 2: arrangement + mixer");
@@ -15385,6 +15503,7 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
                     sess->removeProperty ("recentProjects");
                     sess->removeProperty ("recoveryAvailable");
                     sess->removeProperty ("recoverableCount");
+                    sess->removeProperty ("revision");   // step-1 slice 6: monotonic, advances on undo too
                 }
             }
             // An AUTOMATED parameter's live `value` is DERIVED, not persisted: it is the
@@ -15433,8 +15552,34 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
                                     objN ({ { "trackId", dt }, { "seconds", 1.0 }, { "freq", 330.0 } })), "clipId");
         const int  mbus = (int) cmd (ops, "create_bus", args1 ("name", "MxBus"))
                               .getProperty ("data", var()).getProperty ("busNumber", -1);
+        // Step-1 slice 5 — a persistent send for the set_send_* rows. The add_send row
+        // below is undone by the loop (every row is), so the send it creates is gone by
+        // the next row; these three rows need a send that survives, on a track the
+        // remove_track row does not touch (the persist pass re-applies the table
+        // cumulatively, so MxDisposable is gone by then).
+        const auto st   = rid (cmd (ops, "create_track", args1 ("name", "MxSendSrc")), "trackId");
+        const auto stSend = (mbus >= 0 && st.isNotEmpty())
+                              ? cmd (ops, "add_send", objN ({ { "trackId", st }, { "bus", mbus }, { "db", -6.0 } }))
+                              : var();
         check (mt.isNotEmpty() && mwc.isNotEmpty() && eqIx >= 0 && mmc.isNotEmpty()
-               && dc.isNotEmpty() && mbus >= 0, "matrix fixture built");
+               && dc.isNotEmpty() && mbus >= 0 && st.isNotEmpty() && ok (stSend), "matrix fixture built");
+
+        // Step-1 slice 5 repair (verifier finding, minor) — set_send_level must refuse a
+        // non-finite level the way add_send/set_send_pan refuse a non-finite pan. A JSON
+        // literal cannot spell NaN, but a string arg can ("nan" → juce readDoubleValue →
+        // quiet_NaN), and jlimit passes NaN straight through (every comparison is false)
+        // into the parameter's atomic value AND its tree property. Refused means: ok:false,
+        // and the canonical snapshot is byte-identical (nothing reached the engine). The
+        // restoring set below keeps a RED build (no guard) from carrying NaN into the rows.
+        {
+            const auto s0  = canon();
+            const auto nan = cmd (ops, "set_send_level", objN ({ { "trackId", st }, { "bus", mbus }, { "db", "nan" } }));
+            check (! ok (nan), "set_send_level refuses a non-finite db");
+            check (nan.getProperty ("error", var()).toString().contains ("finite"),
+                   "...and the refusal names the finite requirement");
+            check (canon() == s0, "a refused non-finite set_send_level mutates nothing (canonical snapshot equal)");
+            cmd (ops, "set_send_level", objN ({ { "trackId", st }, { "bus", mbus }, { "db", -6.0 } }));
+        }
 
         Array<var> rippleTracks; rippleTracks.add (var (mt));
         struct MatrixCase { String name; var args; };
@@ -15489,6 +15634,12 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
             { "remove_track",         objN ({ { "trackId", dt } }) },
             { "create_bus",           objN ({ { "name", "MxBus2" } }) },
             { "add_send",             objN ({ { "trackId", mt }, { "bus", mbus }, { "db", -3.0 } }) },
+            // Step-1 slice 5 (R4) — the three send edits, on the fixture send above. Each
+            // must restore on ONE undo with a synchronous readback: the snapshot reads the
+            // AutomatableParameter's live value (getGainDb/isMute/getPan), not the tree.
+            { "set_send_level",       objN ({ { "trackId", st }, { "bus", mbus }, { "db", -18.0 } }) },
+            { "set_send_mute",        objN ({ { "trackId", st }, { "bus", mbus }, { "mute", true } }) },
+            { "set_send_pan",         objN ({ { "trackId", st }, { "bus", mbus }, { "pan", 0.5 } }) },
             { "delete_time_range",    objN ({ { "start", 0.5 }, { "end", 1.0 },
                                               { "trackIds", var (rippleTracks) }, { "ripple", true } }) },
         };

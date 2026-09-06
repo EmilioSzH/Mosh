@@ -32,7 +32,9 @@ export type TaskMeta = { utterance?: string; source?: string };
 
 type ExecResult = { ok: boolean; error?: string; data?: unknown };
 export type TaskExecDeps = {
-  exec?: (command: string, args?: Record<string, unknown>) => Promise<ExecResult>;
+  /** Step-1 slice 6 — the third argument is the task's provenance (`meta.source`,
+   *  default "agent_loop"), forwarded as the `origin` sibling on every envelope. */
+  exec?: (command: string, args?: Record<string, unknown>, origin?: string) => Promise<ExecResult>;
   refresh?: () => Promise<void>;
   /** The task's abort signal — a settle-wait cancels pending renders on abort. */
   signal?: { aborted: boolean };
@@ -72,6 +74,26 @@ function noteKeyError(command: string, args: Record<string, unknown>, key: Sessi
   return null;
 }
 
+// Step-1 slice 4 — the ONLY keys of a result payload that reach the model, in the
+// order they render. Everything else in `data` (names, values, file paths, job
+// handles) stays behind the seam exactly as before.
+const RESULT_ID_KEYS = ["trackId", "clipId", "bus", "busNumber", "index", "padId"] as const;
+
+/** The loop-safe id subset of a command's result payload: string ids (non-empty)
+ *  and finite numeric ids under the RESULT_ID_KEYS names, from a plain object
+ *  payload only. Undefined — never `{}` — when there is nothing to keep. */
+export function pickResultIds(data: unknown): Record<string, string | number> | undefined {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return undefined;
+  const payload = data as Record<string, unknown>;
+  const ids: Record<string, string | number> = {};
+  for (const key of RESULT_ID_KEYS) {
+    const v = payload[key];
+    if (typeof v === "string" && v !== "") ids[key] = v;
+    else if (typeof v === "number" && Number.isFinite(v)) ids[key] = v;
+  }
+  return Object.keys(ids).length ? ids : undefined;
+}
+
 function newTurnId(): string {
   try {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -97,7 +119,13 @@ export type TaskExecutor = {
 };
 
 export function createTaskExecutor(label: string, meta: TaskMeta = {}, deps: TaskExecDeps = {}): TaskExecutor {
-  const exec = deps.exec ?? ((c: string, a?: Record<string, unknown>) => useStore.getState().exec(c, a));
+  const seam = deps.exec
+    ?? ((c: string, a?: Record<string, unknown>, o?: string) => useStore.getState().exec(c, a, undefined, o));
+  // Step-1 slice 6 — ONE provenance value for the whole task: the same `source` the
+  // batch_begin marker carries in its args (below) also rides every envelope of the
+  // task as `origin`, so MoshOps stamps it on each JSONL line beside the turn_id.
+  const origin = meta.source ?? "agent_loop";
+  const exec = (c: string, a?: Record<string, unknown>) => seam(c, a, origin);
   const refresh = deps.refresh ?? (() => useStore.getState().refresh());
   let opened = false;
   let closed = false;
@@ -178,7 +206,8 @@ export function createTaskExecutor(label: string, meta: TaskMeta = {}, deps: Tas
       if (allowed.some((c) => !READ_ONLY.has(c.command))) await ensureOpen();
       for (const c of allowed) {
         const r = await exec(c.command, c.args);
-        entries.push({ index: c.index, command: c.command, ok: r.ok, error: r.ok ? undefined : r.error });
+        const ids = pickResultIds(r.data);
+        entries.push({ index: c.index, command: c.command, ok: r.ok, error: r.ok ? undefined : r.error, ...(ids ? { ids } : {}) });
         // AGT-MEM (M4, item 6) — same fire-and-forget "uses" tracking as executor.ts's
         // runAgentBatch (see that file's comment / usesTracking.ts's header).
         if (r.ok) void bumpPatternUsesIfMatched(c.command, c.args, exec);
@@ -199,7 +228,7 @@ export function createTaskExecutor(label: string, meta: TaskMeta = {}, deps: Tas
 
       entries.sort((a, b) => a.index - b.index);
       return {
-        results: entries.map(({ command, ok, error }) => ({ command, ok, error })),
+        results: entries.map(({ command, ok, error, ids }) => ({ command, ok, error, ...(ids ? { ids } : {}) })),
         snapshot: await getSnapshot(),
       };
     },

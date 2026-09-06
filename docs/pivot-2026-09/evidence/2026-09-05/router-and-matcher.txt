@@ -1,0 +1,21 @@
+# routeAsk / balance matcher at 0da6c638 (ui/, tsx)
+"halve the hats in bar 7" -> single
+"turn the clap down 3 dB" -> single
+"sustain the stabs" -> single
+"make the B section darker" -> single
+"add a counter phrase" -> single
+"sustain the stabs, then turn the clap down 3 dB" -> loop
+"lower the vocal 3 dB" -> single
+"turn the vocal down 3 dB" -> single
+"more reverb on the vocal" -> single
+"set the vocal reverb send to -12 dB" -> single
+"another 3 dB" -> single
+"drop the drums 3 dB" -> single
+"mute the vocal" -> single
+"is the vocal too loud" -> single
+balance "lower the vocal 3 dB" -> null
+balance "turn the vocal down 3 dB" -> null
+balance "set the vocal to -13 dB" -> {"action":"set_level","trackName":"the vocal","db":-13}
+balance "more reverb on the vocal" -> null
+balance "another 3 dB" -> null
+# vitest: src/agent/loop/router.test.ts (32) + loop.test.ts (14) = 46 passed, 2026-09-05 00:30

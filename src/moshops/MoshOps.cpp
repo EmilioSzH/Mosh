@@ -533,11 +533,34 @@ void MoshOps::timerCallback()
 // ─────────────────────────────────────────────────────────────────────────────
 // Dispatch
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Step-1 slice 6 — the origin an OUTERMOST execute() owns for everything it logs: the
+// envelope's non-empty string "origin" sibling (beside command/args, like `transaction`),
+// else "ui" when the call came through executeFromUi, else "native". See currentOrigin_.
+static juce::String originForEnvelope (const juce::var& command, bool fromUi)
+{
+    const auto origin = command.getProperty ("origin", juce::var());
+    if (origin.isString())
+    {
+        const auto s = origin.toString().trim();
+        if (s.isNotEmpty()) return s;
+    }
+    return fromUi ? juce::String ("ui") : juce::String ("native");
+}
+
+// Step-1 slice 6 — batch_begin's args.turn_id (a non-empty string), else empty.
+static juce::String turnIdOf (const juce::var& args)
+{
+    const auto v = args.getProperty ("turn_id", juce::var());
+    return v.isString() ? v.toString().trim() : juce::String();
+}
+
 juce::var MoshOps::executeFromUi (const juce::var& command)
 {
     const juce::ScopedValueSetter<bool> guard (
         projectEpochManagedByUi_,
         (bool) command.getProperty ("_moshProjectEpochPrepared", false));
+    const juce::ScopedValueSetter<bool> fromUi (dispatchFromUi_, true);   // step-1 slice 6
     return execute (command);
 }
 
@@ -555,6 +578,12 @@ juce::var MoshOps::execute (const juce::var& command)
         ~DepthGuard() { --depth; }
         int& depth;
     } depthGuard (execDepth_);
+
+    // Step-1 slice 6 — the OUTERMOST call owns the origin for every line it logs; a
+    // re-entered execute (composites, the multiplayer apply path) inherits it unchanged,
+    // and the setter restores the previous value on the way out.
+    const juce::ScopedValueSetter<juce::String> originGuard (
+        currentOrigin_, execDepth_ == 1 ? originForEnvelope (command, dispatchFromUi_) : currentOrigin_);
 
     const bool outermost = (execDepth_ == 1) && ! replayingRecovery_;
 
@@ -1176,6 +1205,7 @@ juce::var MoshOps::cmdBatchBegin (const juce::var& args)
         const auto label = args.getProperty ("name", var ("agent edit")).toString();
         beginUndoTransaction (label);
         inBatch = true;
+        batchTurnId_ = turnIdOf (args);   // step-1 slice 6 — stamps this line and every line through batch_end
         logLine ("batch_begin", args, true, {}, false);
         return okResult ("batch_begin");
     }
@@ -1254,6 +1284,7 @@ juce::var MoshOps::cmdBatchBegin (const juce::var& args)
     beginUndoTransaction (record->label);
     inBatch = true;
     txn_ = std::move (record);
+    batchTurnId_ = turnIdOf (args);   // step-1 slice 6 — same sibling stamp as the legacy mode
 
     logLine ("batch_begin", args, true, {}, false);
     appendTxnLedger (*txn_);
@@ -1271,6 +1302,7 @@ juce::var MoshOps::cmdBatchEnd (const juce::var& args)
             return errResult ("batch_end", "no batch is open");
         inBatch = false;
         logLine ("batch_end", args, true, {}, false);
+        batchTurnId_.clear();   // step-1 slice 6 — batch_end is the turn's last stamped line
         emitSnapshotInvalidated();
         return okResult ("batch_end");
     }
@@ -1313,6 +1345,7 @@ juce::var MoshOps::cmdBatchEnd (const juce::var& args)
         txn_->status      = agenttxn::statusNeedsRecovery();
         txn_->failureCode = agenttxn::codeUndoHeadMismatch();
         inBatch = false;
+        batchTurnId_.clear();
         appendTxnLedger (*txn_);
         return errResult ("batch_end",
                           agenttxn::codeUndoHeadMismatch() + ": the undo head is \"" + headName
@@ -1325,6 +1358,7 @@ juce::var MoshOps::cmdBatchEnd (const juce::var& args)
         txn_->status      = agenttxn::statusNeedsRecovery();
         txn_->failureCode = agenttxn::codeFingerprintMismatch();
         inBatch = false;
+        batchTurnId_.clear();
         appendTxnLedger (*txn_);
         return errResult ("batch_end",
                           agenttxn::codeFingerprintMismatch() + ": the session changed without "
@@ -1335,6 +1369,7 @@ juce::var MoshOps::cmdBatchEnd (const juce::var& args)
         txn_->status      = agenttxn::statusNeedsRecovery();
         txn_->failureCode = agenttxn::codeFingerprintMismatch();
         inBatch = false;
+        batchTurnId_.clear();
         appendTxnLedger (*txn_);
         return errResult ("batch_end",
                           agenttxn::codeFingerprintMismatch() + ": edit revision went backwards");
@@ -1344,6 +1379,7 @@ juce::var MoshOps::cmdBatchEnd (const juce::var& args)
     txn_->status   = agenttxn::statusCommitted();
     txn_->failureCode.clear();
     logLine ("batch_end", args, true, {}, false);
+    batchTurnId_.clear();   // step-1 slice 6 — the commit line is the turn's last stamped line
     appendTxnLedger (*txn_);
     emitSnapshotInvalidated();
     return okResult ("batch_end", txnStatusVar (*txn_));
@@ -1428,6 +1464,7 @@ juce::var MoshOps::cmdBatchRollback (const juce::var& args)
         txn_->status      = agenttxn::statusNeedsRecovery();
         txn_->failureCode = agenttxn::codeUndoHeadMismatch();
         inBatch = false;
+        batchTurnId_.clear();
         appendTxnLedger (*txn_);
         return errResult ("batch_rollback",
                           agenttxn::codeUndoHeadMismatch() + ": the undo head is \"" + headName
@@ -1447,6 +1484,7 @@ juce::var MoshOps::cmdBatchRollback (const juce::var& args)
     const auto now = txnFingerprint();
     if (now != txn_->preFingerprint)
     {
+        batchTurnId_.clear();
         txn_->status      = agenttxn::statusNeedsRecovery();
         txn_->failureCode = agenttxn::codeFingerprintMismatch();
         appendTxnLedger (*txn_);
@@ -1458,6 +1496,7 @@ juce::var MoshOps::cmdBatchRollback (const juce::var& args)
     txn_->status = agenttxn::statusRolledBack();
     txn_->failureCode.clear();
     logLine ("batch_rollback", args, true, {}, false);
+    batchTurnId_.clear();   // step-1 slice 6 — the rollback line is the turn's last stamped line
     appendTxnLedger (*txn_);
     return okResult ("batch_rollback", txnStatusVar (*txn_));
 }
@@ -3213,6 +3252,11 @@ juce::var MoshOps::snapshot()
     session->setProperty ("length", edit.getLength().inSeconds());
     session->setProperty ("editFile", eng.editFile().getFullPathName());
     session->setProperty ("dirty", eng.isDirty());   // unsaved-changes flag (gap 1)
+    // Step-1 slice 6 — editRevision_, the per-process mutation counter every mutating
+    // command bumps through beginTxn (and undo / redo / rollback bump directly), exposed
+    // so the loop can bind a planned step to the session it observed and park when it
+    // moved. ADDITIVE; monotonic within a process; not persisted with the project.
+    session->setProperty ("revision", editRevision_);
     // PRJ-FMT — cold-start refusal: the launch session file was made by a newer Mosh, so a
     // safe empty fallback is live. The UI shows this as a blocking "please update Mosh" banner.
     if (eng.hasProjectLoadError())
@@ -4231,6 +4275,18 @@ void MoshOps::logLine (const juce::String& command, const juce::var& args,
     if (error.isNotEmpty()) o->setProperty ("error", error);
     o->setProperty ("undoable", undoable);
     o->setProperty ("txn", currentHistoryTxn());
+    // Step-1 slice 6 — ADDITIVE provenance after the existing fields (readers treat
+    // absence as unknown). `origin` on every line: the outermost execute's origin, a
+    // recovery replay's "recovery", or "native" for a line written outside any execute
+    // (a save-time label, an async completion). `turn_id` only while a batch owns the
+    // log — batch_begin through batch_end / batch_rollback inclusive — as a SIBLING, so
+    // a reader never opens args; the in-batch commands' own args stay untouched.
+    {
+        juce::String origin = currentOrigin_.isNotEmpty() ? currentOrigin_ : juce::String ("native");
+        if (replayingRecovery_) origin = "recovery";
+        o->setProperty ("origin", origin);
+        if (batchTurnId_.isNotEmpty()) o->setProperty ("turn_id", batchTurnId_);
+    }
     const auto record = var (o);
     const auto line = JSON::toString (record, true);
     const auto filePath = logFile.getFullPathName();

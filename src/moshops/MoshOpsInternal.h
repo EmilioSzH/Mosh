@@ -108,6 +108,82 @@ namespace mosh
         const float valueBefore;
     };
 
+    // Step-1 slice 5 (R4) — make an AuxSendPlugin level/mute/pan change UNDOABLE on ONE
+    // step with a synchronous readback.
+    //
+    // te::AuxSendPlugin::setGainDb/setMute/setPan (pinned engine + patches 0007/0008) go
+    // through AutomatableParameter::setParameter, which does two things: it stores the new
+    // value in the parameter's ATOMIC currentValue — what getGainDb()/isMute()/getPan(), and
+    // so the snapshot's sends[].db/mute/pan, read — and it writes the backing CachedValue
+    // (gainLevel/muted/pan) THROUGH the Edit's UndoManager (patch 0003's default
+    // useUndoManager=true: AttachedValue::setValue → CachedValue::operator=). So the
+    // transaction beginTxn opened holds a bare SetPropertyAction on the tree. Undo reverts
+    // that property, and AutomatableParameter::valueTreePropertyChanged deliberately
+    // refreshes only the CachedValue, never currentValue (the engine's own "we shouldn't
+    // call attachedValue->updateParameterFromValue here" note) — so the readback stays at
+    // the pre-undo value until the project is reopened, and the next set to that same
+    // value short-circuits as "unchanged" and never reaches the file (R4, verified headless
+    // 2026-09-05, docs/pivot-2026-09/evidence/2026-09-05/b6-three-undos.txt: one send edit
+    // cost TWO undo steps because a deferred message-thread write followed the revert).
+    //
+    // Same fix shape as SetFaderValueAction: replay the parameter on perform/undo/redo via
+    // setParameterWithoutUndo (patch 0003), which updates the atomic mirror AND the tree
+    // (null UndoManager) in lockstep, so THIS action is the only entry in the transaction
+    // and the readback is correct the moment undo returns. Same address discipline as
+    // SetPluginParamValueAction (MoshOps.Plugins.cpp): an aux send is remove_send-reachable,
+    // and undo of that removal re-creates a NEW Plugin object under the SAME EditItemID, so
+    // hold the id, never a reference, and re-resolve through the PluginCache on every call
+    // (unresolvable ⇒ safe no-op, not a use-after-free). lastVolumeBeforeMuteDb is not
+    // mirrored: the engine only reads it to migrate pre-patch files that lack a `mute`
+    // property, and every file this path writes has one.
+    struct SetSendParamValueAction final : public juce::UndoableAction
+    {
+        enum class Which { level, mute, pan };
+
+        SetSendParamValueAction (te::AuxSendPlugin& send, Which which, float newValue)
+            : edit (send.edit), sendItemId (send.itemID), param (which),
+              valueAfter (newValue), valueBefore (read (send, which)) {}
+
+        bool perform() override        { apply (valueAfter);  return true; }
+        bool undo() override           { apply (valueBefore); return true; }
+        int  getSizeInUnits() override { return (int) sizeof (*this); }
+
+        static te::AutomatableParameter* parameterFor (te::AuxSendPlugin& s, Which w)
+        {
+            switch (w)
+            {
+                case Which::level: return s.gain.get();
+                case Which::mute:  return s.getMuteParameter();
+                case Which::pan:   return s.getPanParameter();
+            }
+            return nullptr;
+        }
+
+        static float read (te::AuxSendPlugin& s, Which w)
+        {
+            auto* p = parameterFor (s, w);
+            return p != nullptr ? p->getCurrentValue() : 0.0f;
+        }
+
+        te::AuxSendPlugin* resolve() const
+        {
+            return dynamic_cast<te::AuxSendPlugin*> (edit.getPluginCache().getPluginFor (sendItemId).get());
+        }
+
+        void apply (float v)
+        {
+            if (auto* s = resolve())
+                if (auto* p = parameterFor (*s, param))
+                    p->setParameterWithoutUndo (p->getValueRange().clipValue (v), juce::sendNotification);
+        }
+
+        te::Edit& edit;
+        const te::EditItemID sendItemId;
+        const Which param;
+        const float valueAfter;
+        const float valueBefore;
+    };
+
     // ── RFC 001 (A-PR3) — promoted from MoshOps.cpp's anonymous namespace ─────
     // Same promotion rule as A-PR2: each entry is referenced by BOTH a moved
     // domain TU and code that remains in MoshOps.cpp (or, for isSerumPlugin/

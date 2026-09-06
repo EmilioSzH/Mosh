@@ -3,8 +3,18 @@
 // idiom) so batch bracketing, undo grouping and the destructive budget are
 // proven on the same path the app ships.
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { createTaskExecutor } from "./taskExec";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// Step-1 slice 6 — the bridge's executeCommand is spied (wrapping the real mock
+// path, never replacing it) so the ENVELOPE a loop batch sends can be inspected:
+// the `origin` sibling must reach the seam beside command/args.
+vi.mock("../../bridge", async () => {
+  const actual = await vi.importActual<typeof import("../../bridge")>("../../bridge");
+  return { ...actual, executeCommand: vi.fn(actual.executeCommand) };
+});
+
+import { executeCommand } from "../../bridge";
+import { createTaskExecutor, pickResultIds } from "./taskExec";
 import { DESTRUCTIVE_BLOCK_REASON } from "../destructiveScreen";
 import { useStore } from "../../store";
 import { __resetMockForTests } from "../../bridge.mock";
@@ -146,5 +156,128 @@ describe("createTaskExecutor — one undo unit per agent task", () => {
     await t.close();
     await t.close(); // second close is a no-op, not an error
     await expect(t.env.runBatch("late", [{ command: "create_track", args: { name: "Y" } }])).rejects.toThrow(/closed/);
+  });
+});
+
+describe("createTaskExecutor — result ids reach the step results (step-1 slice 4)", () => {
+  // Before this slice the step envelope was {command, ok, error} and `data` was
+  // dropped, so a trackId/clipId/busNumber a command minted never reached the model
+  // — it had to guess (or re-read the session) to chain the next call.
+  beforeEach(async () => {
+    __resetMockForTests();
+    await useStore.getState().refresh();
+  });
+
+  it("keeps the ids a result payload carries (create_track → trackId, create_bus → busNumber+trackId) and nothing else", async () => {
+    const t = createTaskExecutor("build", {});
+    const s = await t.env.runBatch("step 1", [
+      { command: "create_track", args: { name: "Vocal" } },
+      { command: "create_bus", args: { name: "Reverb" } },
+    ]);
+    const vocal = s.snapshot.tracks.find((x) => x.name === "Vocal")!;
+    expect(s.results[0]).toMatchObject({ command: "create_track", ok: true, ids: { trackId: vocal.id } });
+    expect(Object.keys(s.results[0]!.ids!)).toEqual(["trackId"]);
+    const reverb = s.snapshot.buses!.find((b) => b.name === "Reverb")!;
+    // the mock's create_bus payload is {busNumber, trackId, name} — `name` is not an id
+    expect(s.results[1]!.ids).toEqual({ busNumber: reverb.bus, trackId: reverb.trackId });
+    await t.close();
+  });
+
+  it("a result whose payload carries no ids has NO ids field at all (and neither does a rejected call)", async () => {
+    const t = createTaskExecutor("tempo", {});
+    const s = await t.env.runBatch("step 1", [
+      { command: "set_tempo", args: { bpm: 100 } },
+      { command: "definitely_not_a_command", args: {} },
+    ]);
+    expect(s.results[0]).toMatchObject({ command: "set_tempo", ok: true });
+    expect("ids" in s.results[0]!).toBe(false);
+    expect(s.results[1]!.ok).toBe(false);
+    expect("ids" in s.results[1]!).toBe(false);
+    await t.close();
+  });
+});
+
+describe("pickResultIds — the loop-safe subset of a result payload", () => {
+  it("picks only the id keys, in a stable order, from an object payload", () => {
+    expect(pickResultIds({ name: "x", clipId: "101", trackId: "17", nested: { trackId: "nope" } }))
+      .toEqual({ trackId: "17", clipId: "101" });
+    expect(Object.keys(pickResultIds({ clipId: "101", trackId: "17" })!)).toEqual(["trackId", "clipId"]);
+  });
+
+  it("returns undefined for a payload without ids, an array, a primitive, or nothing", () => {
+    expect(pickResultIds(undefined)).toBeUndefined();
+    expect(pickResultIds(true)).toBeUndefined();
+    expect(pickResultIds([{ trackId: "17" }])).toBeUndefined();
+    expect(pickResultIds({ name: "Kept", db: -3 })).toBeUndefined();
+  });
+
+  it("keeps numeric ids (busNumber 0, index 0, padId) and drops empty or non-finite values", () => {
+    expect(pickResultIds({ busNumber: 0, index: 0, padId: 3, bus: 1 })).toEqual({ bus: 1, busNumber: 0, index: 0, padId: 3 });
+    expect(pickResultIds({ trackId: "", clipId: null, padId: Number.NaN })).toBeUndefined();
+  });
+});
+
+// Step-1 slice 6 — the loop's provenance reaches the ENVELOPE, not only batch_begin's
+// args: every command of a task carries `origin` beside command/args so MoshOps can
+// stamp it on each JSONL line (with the batch's turn_id). Default "agent_loop";
+// meta.source wins when a caller names its lane.
+describe("createTaskExecutor — origin on the envelope (step-1 slice 6)", () => {
+  type Envelope = Record<string, unknown>;
+  const envelopes = (): Envelope[] =>
+    vi.mocked(executeCommand).mock.calls.map(([req]) => req as Envelope);
+
+  beforeEach(async () => {
+    __resetMockForTests();
+    await useStore.getState().refresh();
+    vi.mocked(executeCommand).mockClear();
+  });
+
+  it("every envelope of a loop batch carries origin agent_loop by default", async () => {
+    const trackId = snap().tracks[0]!.id;
+    const t = createTaskExecutor("lower it", { utterance: "lower the vocal 3 dB" });
+    const s = await t.env.runBatch("step 1", [{ command: "set_track_volume", args: { trackId, db: -6 } }]);
+    expect(s.results[0]!.ok).toBe(true);
+    await t.close();
+    const seen = envelopes();
+    expect(seen.map((e) => e.command)).toEqual(["batch_begin", "set_track_volume", "batch_end"]);
+    for (const e of seen) expect(e.origin).toBe("agent_loop");
+    // batch_begin's own args still carry the marker fields the harvester reads.
+    const beginArgs = seen[0]!.args as Record<string, unknown>;
+    expect(beginArgs.source).toBe("agent_loop");
+    expect(typeof beginArgs.turn_id).toBe("string");
+  });
+
+  it("meta.source names the lane and wins over the default", async () => {
+    const trackId = snap().tracks[0]!.id;
+    const t = createTaskExecutor("lower it", { source: "produce_driver" });
+    await t.env.runBatch("step 1", [{ command: "set_track_volume", args: { trackId, db: -6 } }]);
+    await t.close();
+    const seen = envelopes();
+    expect(seen.length).toBe(3);
+    for (const e of seen) expect(e.origin).toBe("produce_driver");
+  });
+
+  it("execRaw (the produce preflight path) carries the origin too", async () => {
+    const t = createTaskExecutor("produce", { source: "agent_loop" });
+    const r = await t.execRaw("create_track", { name: "Preflight" });
+    expect(r.ok).toBe(true);
+    await t.close();
+    const seen = envelopes();
+    expect(seen.map((e) => e.command)).toEqual(["batch_begin", "create_track", "batch_end"]);
+    for (const e of seen) expect(e.origin).toBe("agent_loop");
+  });
+
+  it("an injected deps.exec receives the origin as its third argument", async () => {
+    const calls: Array<[string, Record<string, unknown> | undefined, string | undefined]> = [];
+    const exec = async (command: string, args?: Record<string, unknown>, origin?: string) => {
+      calls.push([command, args, origin]);
+      return useStore.getState().exec(command, args, undefined, origin);
+    };
+    const trackId = snap().tracks[0]!.id;
+    const t = createTaskExecutor("lower it", {}, { exec, refresh: () => useStore.getState().refresh() });
+    await t.env.runBatch("step 1", [{ command: "set_track_volume", args: { trackId, db: -6 } }]);
+    await t.close();
+    expect(calls.map(([c]) => c)).toEqual(["batch_begin", "set_track_volume", "batch_end"]);
+    for (const [, , origin] of calls) expect(origin).toBe("agent_loop");
   });
 });

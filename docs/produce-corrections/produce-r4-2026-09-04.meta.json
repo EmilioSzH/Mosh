@@ -1,0 +1,151 @@
+{
+  "id": "produce-corrections/produce-r4-2026-09-04",
+  "created": "2026-09-04",
+  "ask": "produce me a dark jerk trap beat at 148 in D minor",
+  "prompt_version": "produce-v4 (PRODUCE_VERSION 4) — v3 + soundingRootTable (the 808's sounding roots per beat given to the model instead of asked to be recalled); three FRESH compositions, first new notes since r2",
+  "reference": "A-flywheel.wav — owner's Live 12 export of the corrected cATHARDIC_trap_r0_gen001 A section (mac-r0-001)",
+  "runs": {
+    "r4-opus-s1": {
+      "seed": 1,
+      "model": "opus",
+      "provider": "shim",
+      "brain": "claude -p shim, effort medium, no temperature control",
+      "samples": "palette-v2, kit-matched, 0 ms onsets (NO labkit twin this round)",
+      "mix": "recipe-A chain: highpass 180 Hz on 7 melodic tracks, gain map, master softclip + The God Particle",
+      "presets": "seeded Vital draw (seed 3 = same seven presets as the r3c pass; seeds 1/2 differ)",
+      "steps": 9,
+      "commandsOk": 10,
+      "commandsInvalid": 0,
+      "tracks": 9,
+      "clips": 9,
+      "wallMs": 276727,
+      "check": {
+        "ok": true,
+        "initial": {
+          "ok": true,
+          "problems": [],
+          "summary": "produceCheck: no problems found — harmony, section density, pad coverage and clip coverage all pass."
+        },
+        "repaired": null,
+        "repairAttempted": false
+      }
+    },
+    "r4-opus-s2": {
+      "seed": 2,
+      "model": "opus",
+      "provider": "shim",
+      "brain": "claude -p shim, effort medium, no temperature control",
+      "samples": "palette-v2, kit-matched, 0 ms onsets (NO labkit twin this round)",
+      "mix": "recipe-A chain: highpass 180 Hz on 7 melodic tracks, gain map, master softclip + The God Particle",
+      "presets": "seeded Vital draw (seed 3 = same seven presets as the r3c pass; seeds 1/2 differ)",
+      "steps": 9,
+      "commandsOk": 10,
+      "commandsInvalid": 0,
+      "tracks": 9,
+      "clips": 9,
+      "wallMs": 342334,
+      "check": {
+        "ok": true,
+        "initial": {
+          "ok": true,
+          "problems": [],
+          "summary": "produceCheck: no problems found — harmony, section density, pad coverage and clip coverage all pass."
+        },
+        "repaired": null,
+        "repairAttempted": false
+      }
+    },
+    "r4-sonnet-s3": {
+      "seed": 3,
+      "model": "sonnet",
+      "provider": "shim",
+      "brain": "claude -p shim, effort medium, no temperature control",
+      "samples": "palette-v2, kit-matched, 0 ms onsets (NO labkit twin this round)",
+      "mix": "recipe-A chain: highpass 180 Hz on 7 melodic tracks, gain map, master softclip + The God Particle",
+      "presets": "seeded Vital draw (seed 3 = same seven presets as the r3c pass; seeds 1/2 differ)",
+      "steps": 25,
+      "commandsOk": 25,
+      "commandsInvalid": 1,
+      "tracks": 9,
+      "clips": 24,
+      "wallMs": 985394,
+      "check": {
+        "ok": true,
+        "initial": {
+          "ok": false,
+          "problems": [
+            {
+              "trackId": "1032",
+              "code": "missing_clip",
+              "detail": "role \"drone\" (track 1032) has no clip/notes at all."
+            },
+            {
+              "trackId": "1044",
+              "code": "missing_clip",
+              "detail": "role \"arp\" (track 1044) has no clip/notes at all."
+            },
+            {
+              "trackId": "1050",
+              "code": "missing_clip",
+              "detail": "role \"ambient\" (track 1050) has no clip/notes at all."
+            }
+          ],
+          "summary": "produceCheck: 3 problems found across 3 track(s): missing_clip."
+        },
+        "repaired": {
+          "ok": true,
+          "problems": [],
+          "summary": "produceCheck: no problems found — harmony, section density, pad coverage and clip coverage all pass."
+        },
+        "repairAttempted": true,
+        "repairOutcome": "budget"
+      }
+    }
+  },
+  "candidates": [
+    {
+      "candidate": "B-mosh-r4-opus-s1.wav",
+      "rating": "fail",
+      "user_verdict": "fail",
+      "notes": [
+        "bad sound selection and I hear wrong notes"
+      ]
+    },
+    {
+      "candidate": "B-mosh-r4-opus-s2.wav",
+      "rating": "fail",
+      "user_verdict": "fail",
+      "notes": [
+        "rhythm and mix/sound selection issues"
+      ]
+    },
+    {
+      "candidate": "B-mosh-r4-sonnet-s3.wav",
+      "rating": "fail",
+      "user_verdict": "fail",
+      "notes": [
+        "there are forsure wrong notes in here"
+      ]
+    }
+  ],
+  "rating": "fail ×3 — owner: 'these don't sound better by my recollection'",
+  "user_verdict": "see candidates[] — verbatim, delivered in chat (audition page verdict.json was filled in afterwards from the same words)",
+  "notes": [
+    "bad sound selection and I hear wrong notes",
+    "rhythm and mix/sound selection issues",
+    "there are forsure wrong notes in here"
+  ],
+  "analysis": {
+    "by": "Claude (data, not ear) — 2026-09-04",
+    "findings": [
+      "Every VALIDATED rule is obeyed: harmony-clash notes 22–48% (r1–r3) → 0% on all three; register violations 0; off-16th-grid notes 0; all 10 pads used; drum clip covers all 32 beats; Opus runs one clip per track. The ear did not move. harmony_clash is now the second proxy in this project driven to zero with no verdict change (the passing r2 composition was itself flagged by it).",
+      "Opus drum grids are near-identical across seeds 1 and 2, and bar 2 repeats bar 1 in both: the prompt forbids static repetition but prescribes the jerk core so tightly the model renders it as a literal template. Both 808 lines open 62→65 from the same pitch set.",
+      "Sonnet-s3 wrote 24 clips on 9 tracks: arp had 5 overlapping clips (4 simultaneous notes on every 16th on a monophonic role); drums had 2 overlapping clips (432 hits, 304 duplicates). No validator enforces one clip per track or monophony — the two rules without validators are the two still violated.",
+      "Sound selection is seed luck: seed 3 drew the same seven Vital presets as the r3c clean pass, so sonnet-s3 failed on notes alone with approved sounds; seeds 1/2 drew different presets and both drew 'bad sound selection'. No preset in the 60-preset bank has ever been auditioned by ear.",
+      "Confound: no labkit twin this round (r2/r3c passes were all on the owner's own kit), so palette-vs-labkit and notes-vs-sounds cannot be separated from these three renders.",
+      "Owner's 'wrong notes' = pitch clash with bass/key AND register/voicing AND placement/timing. Pitch-set and register checks read zero, so what he hears lives outside every writable rule: contour, voice-leading, phrase logic, hit choice."
+    ],
+    "what_changed_since_r3c": "notes (fresh compositions, v4 prompt), presets (seeds 1/2), kit (palette only). Mix chain unchanged."
+  },
+  "promoted_to": "No prompt rule promoted — rules are not the lever. Round handed to the Claude-web strategy brief (docs/produce-corrections/CLAUDE-WEB-BRIEF-2026-09-04.md). One-clip-per-track + monophony validators deferred to that plan's step 8; next round waits for the brief's reply."
+}

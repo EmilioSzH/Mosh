@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Snapshot, Track } from "../../../types";
-import type { NativeSkillPayloadV1, StudioSkillEnvironmentV1 } from "../contracts";
+import type { NativeSkillPayloadV1, StudioSkillEnvironmentV1, StudioSkillProvenanceV1 } from "../contracts";
 import { loadNamedPluginV1, parsePluginCatalogV1, pluginQueryV1 } from "./loadNamedPlugin";
 
 type FakeBridgeResult = { readonly ok: boolean; readonly error?: string; readonly data?: unknown };
@@ -32,7 +32,8 @@ class FakeEngine {
   failLoadReason = "instrument on an audio track";
   private sourceStatusCallIndex = 0;
   private readonly txns = new Map<string, FakeTxn>();
-  readonly batchBeginCalls: { transactionId: string; commands: readonly { command: string }[] }[] = [];
+  readonly batchBeginCalls: { transactionId: string; commands: readonly { command: string }[]; args: Record<string, unknown> }[] = [];
+  listPluginsCalls = 0;
 
   constructor(tracks: Track[], selectedTrackId: string | null, plugins: FakePlugin[]) {
     this.tracks = tracks;
@@ -84,12 +85,12 @@ class FakeEngine {
   }
 
   async exec(command: string, args: Record<string, unknown>, transaction?: { transactionId: string; requestId: string; index: number }): Promise<FakeBridgeResult> {
-    if (command === "list_plugins") return { ok: true, data: { plugins: this.plugins } };
+    if (command === "list_plugins") { this.listPluginsCalls += 1; return { ok: true, data: { plugins: this.plugins } }; }
 
     if (command === "batch_begin") {
       const transactionId = args.transactionId as string;
       const commands = args.commands as { index: number; requestId: string; command: string }[];
-      this.batchBeginCalls.push({ transactionId, commands });
+      this.batchBeginCalls.push({ transactionId, commands, args });
       const preFingerprint = this.fingerprint();
       const txn: FakeTxn = {
         status: "open", manifestCount: commands.length, applied: 0,
@@ -143,9 +144,10 @@ function track(overrides: Partial<Track> = {}): Track {
   return { id: "track-1", index: 0, name: "Bass", type: "audio", clips: [], ...overrides };
 }
 
-function environmentFor(engine: FakeEngine): StudioSkillEnvironmentV1 {
+function environmentFor(engine: FakeEngine, provenance?: StudioSkillProvenanceV1): StudioSkillEnvironmentV1 {
   let counter = 0;
   return {
+    ...(provenance ? { provenance } : {}),
     context: () => engine.context(),
     snapshot: async () => engine.snapshot(),
     exec: (command, args, transaction) => engine.exec(command, args as Record<string, unknown>, transaction),
@@ -194,11 +196,17 @@ describe("pluginQueryV1 / parsePluginCatalogV1", () => {
     expect(pluginQueryV1("add four notes to this clip")).toBeNull();
   });
 
-  it("rejects a catalog over the 64-entry cap", () => {
-    const oversized = { plugins: Array.from({ length: 65 }, (_, i) => plugin({ id: `p${i}` })) };
+  // Step-1 brief, slice 2: the cap was 64, and the owner machine's list_plugins result
+  // has 1,198 entries — every "add a …" ask was blocked as "invalid or oversized data"
+  // before it could fall through to the router. There is no engine paging
+  // (cmdListPlugins takes no arguments), so the UI constant is the only bound.
+  it("accepts a real-machine 1,198-entry catalog and enforces the 4096-entry cap boundary", () => {
+    const realMachine = { plugins: Array.from({ length: 1_198 }, (_, i) => plugin({ id: `p${i}`, name: `Plugin ${i}` })) };
+    expect(parsePluginCatalogV1(realMachine)).toHaveLength(1_198);
+    const exact = { plugins: Array.from({ length: 4_096 }, (_, i) => plugin({ id: `p${i}` })) };
+    expect(parsePluginCatalogV1(exact)).toHaveLength(4_096);
+    const oversized = { plugins: Array.from({ length: 4_097 }, (_, i) => plugin({ id: `p${i}` })) };
     expect(parsePluginCatalogV1(oversized)).toBeNull();
-    const exact = { plugins: Array.from({ length: 64 }, (_, i) => plugin({ id: `p${i}` })) };
-    expect(parsePluginCatalogV1(exact)).not.toBeNull();
   });
 
   it("rejects an overlong field (>1024 UTF-16 code units)", () => {
@@ -224,6 +232,8 @@ describe("loadNamedPluginV1 — exact resolution", () => {
       payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Serum 2", slots: {},
     });
     expect(outcome).toMatchObject({ kind: "blocked", code: "missing_target" });
+    // "load X" keeps its guard-first order: the catalog is never read without a target.
+    expect(engine.listPluginsCalls).toBe(0);
     expect(engine.batchBeginCalls).toHaveLength(0);
   });
 
@@ -263,6 +273,170 @@ describe("loadNamedPluginV1 — exact resolution", () => {
     engine.failLoadOnce = true;
     await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Serum 2", slots: {} });
     expect(engine.tracks[0]!.plugins ?? []).toHaveLength(0);
+  });
+});
+
+// Step-1 brief, slice 2 — "add" is shared producer language. When the verb is
+// add/insert/put and the catalog has NO match, the handler must answer `unsupported`
+// (the runtime's own no-match shape) so AgentComposer proceeds to the router instead of
+// ending the turn as studio_skill_blocked. "load X" with no match keeps missing_target:
+// a producer who says "load" means a plug-in.
+describe("loadNamedPluginV1 — add/insert/put with no catalog match falls through", () => {
+  const realMachineCatalog = (): FakePlugin[] =>
+    Array.from({ length: 1_198 }, (_, i) => plugin({ id: `p${i}`, name: `Plugin ${i}`, manufacturer: `Vendor ${i % 37}` }));
+
+  it("\"add a counter phrase\" against a 1,198-entry catalog is unsupported, not blocked, with zero mutation", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], "track-1", realMachineCatalog());
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "add a counter phrase", slots: {},
+    });
+    expect(outcome).toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    expect(engine.batchBeginCalls).toHaveLength(0);
+  });
+
+  it("\"insert …\" and \"put …\" with no match are unsupported too", async () => {
+    for (const utterance of ["insert a riser before the drop", "put a little swing on the hats"]) {
+      const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], "track-1", realMachineCatalog());
+      const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance, slots: {} });
+      expect(outcome.kind, utterance).toBe("unsupported");
+      expect(engine.batchBeginCalls).toHaveLength(0);
+    }
+  });
+
+  it("\"add <installed plug-in>\" still loads it — the fall-through is only for a missing match", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], "track-1", [...realMachineCatalog(), plugin({ id: "ott", name: "OTT", isInstrument: false })]);
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "add OTT", slots: {},
+    });
+    expect(outcome).toMatchObject({ kind: "completed" });
+    expect(engine.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["ott"]);
+  });
+
+  it("\"load Nonexistent\" against the same 1,198-entry catalog keeps missing_target", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], "track-1", realMachineCatalog());
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Nonexistent", slots: {},
+    });
+    expect(outcome).toMatchObject({ kind: "blocked", code: "missing_target" });
+    expect(outcome.kind === "blocked" && outcome.say).toMatch(/rescan/i);
+    expect(engine.batchBeginCalls).toHaveLength(0);
+  });
+
+  // Verifier finding (2026-09-05), MAJOR: the selected-track guard ran BEFORE the catalog
+  // read, so an add/insert/put ask with nothing selected ended studio_skill_blocked
+  // ("Select the track…") and never reached the router. The catalog decides whether the
+  // ask is a plug-in ask at all; only a claimed match earns the select-a-track guidance.
+  it("no track selected + no match is unsupported (never missing_target): the catalog was read, nothing mutated", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], null, realMachineCatalog());
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "add a counter phrase", slots: {},
+    });
+    expect(outcome).toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    expect(engine.listPluginsCalls).toBe(1);
+    expect(engine.batchBeginCalls).toHaveLength(0);
+  });
+
+  it("no track selected + a unique match keeps the existing missing_target select-a-track guidance", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], null, [...realMachineCatalog(), plugin({ id: "ott", name: "OTT", isInstrument: false })]);
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "add OTT", slots: {},
+    });
+    expect(outcome).toMatchObject({ kind: "blocked", code: "missing_target" });
+    expect(outcome.kind === "blocked" && outcome.say).toBe("Select the track you want me to load it on.");
+    expect(engine.batchBeginCalls).toHaveLength(0);
+  });
+
+  it("no track selected + an ambiguous match stops at missing_target too — no choice is issued without a target", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Keys" })], null, [
+      plugin({ id: "p1", manufacturer: "Xfer" }), plugin({ id: "p2", manufacturer: "OtherCo" }),
+    ]);
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "add Serum 2", slots: {},
+    });
+    expect(outcome).toMatchObject({ kind: "blocked", code: "missing_target" });
+    expect(engine.batchBeginCalls).toHaveLength(0);
+  });
+});
+
+// Verifier finding (2026-09-05), MINOR: with the cap at 4096, resolvePluginMatch's rank-3
+// substring test (`name.includes(query)`) is live against 1,198 installed names, so a single
+// part word that sits inside a plug-in name ("add a harmony" → Waves Harmony Mono) was
+// claimed and a load transaction opened. Under add/insert/put a common part word only
+// claims an exact or prefix match; "load X" keeps the substring rank.
+describe("loadNamedPluginV1 — part words under add/insert/put never claim a substring match", () => {
+  const harmonyCatalog = (): FakePlugin[] => [
+    ...Array.from({ length: 1_198 }, (_, i) => plugin({ id: `p${i}`, name: `Plugin ${i}`, manufacturer: `Vendor ${i % 37}` })),
+    plugin({ id: "waves-harmony-mono", name: "Waves Harmony Mono", manufacturer: "Waves", isInstrument: false }),
+  ];
+
+  it("\"add a harmony\" against a catalog holding Waves Harmony Mono is unsupported, with no transaction", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", harmonyCatalog());
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "add a harmony", slots: {},
+    });
+    expect(outcome).toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    expect(engine.batchBeginCalls).toHaveLength(0);
+    expect(engine.tracks[0]!.plugins ?? []).toHaveLength(0);
+  });
+
+  it("every listed part word is refused as a substring claim, singular and plural, under add/insert/put", async () => {
+    const cases: readonly (readonly [utterance: string, name: string])[] = [
+      ["add a phrase", "Waves Phrase Mono"], ["add a melody", "Waves Melody Mono"], ["add a hook", "Waves Hook Mono"],
+      ["insert a riff", "Waves Riff Mono"], ["add a fill", "Waves Fill Mono"], ["add a bassline", "Waves Bassline Mono"],
+      ["add chords", "Waves Chords Mono"], ["add a counter melody", "Waves Counter Melody Mono"],
+      ["add a counter phrase", "Waves Counter Phrase Mono"], ["put a layer", "Waves Layer Mono"], ["add a part", "Waves Part Mono"],
+      ["add harmonies", "Waves Harmonies Mono"], ["add hooks", "Waves Hooks Mono"], ["add a bass line", "Waves Bass Line Mono"],
+    ];
+    for (const [utterance, name] of cases) {
+      const engine = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", [plugin({ id: "x", name, manufacturer: "Waves", isInstrument: false })]);
+      const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance, slots: {} });
+      expect(outcome.kind, utterance).toBe("unsupported");
+      expect(engine.batchBeginCalls, utterance).toHaveLength(0);
+    }
+  });
+
+  it("an exact name is still claimed under add; a bare prefix is not (\"add a hook\" must not load Hook Machine)", async () => {
+    const exact = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", [plugin({ id: "harmony", name: "Harmony", manufacturer: "Xfer", isInstrument: false })]);
+    expect(await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(exact), utterance: "add a harmony", slots: {} })).toMatchObject({ kind: "completed" });
+    expect(exact.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["harmony"]);
+
+    const prefix = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", [plugin({ id: "hook-machine", name: "Hook Machine", manufacturer: "Xfer", isInstrument: false })]);
+    expect(await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(prefix), utterance: "add a hook", slots: {} })).toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    expect(prefix.batchBeginCalls).toHaveLength(0);
+  });
+
+  it("\"add a beat\" against a catalog holding Splice Beatmaker is unsupported — a prefix hit is still a hijack of a musical ask", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", [
+      ...harmonyCatalog(), plugin({ id: "splice-beatmaker", name: "Beatmaker", manufacturer: "Splice", isInstrument: true }),
+    ]);
+    const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "add a beat", slots: {} });
+    expect(outcome).toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    expect(engine.batchBeginCalls).toHaveLength(0);
+  });
+
+  it("an explicit \"plugin\" keyword restores the prefix claim under add (\"add the plugin harmony\" → Harmony Mono)", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", [plugin({ id: "harmony-mono", name: "Harmony Mono", manufacturer: "Waves", isInstrument: false })]);
+    const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "add the plugin harmony", slots: {} });
+    expect(outcome).toMatchObject({ kind: "completed" });
+    expect(engine.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["harmony-mono"]);
+  });
+
+  it("a multi-word query that is not the plug-in's exact name no longer claims it (\"add Harmony Mono\" vs \"Waves Harmony Mono\" is unsupported; the exact name loads)", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", harmonyCatalog());
+    expect(await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "add Harmony Mono", slots: {} }))
+      .toEqual({ kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." });
+    const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "add Waves Harmony Mono", slots: {} });
+    expect(outcome).toMatchObject({ kind: "completed" });
+    expect(engine.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["waves-harmony-mono"]);
+  });
+
+  it("\"load Harmony\" still resolves Waves Harmony Mono through the substring rank (load is unchanged)", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Vocal" })], "track-1", harmonyCatalog());
+    const outcome = await loadNamedPluginV1({
+      payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Harmony", slots: {},
+    });
+    expect(outcome).toMatchObject({ kind: "completed" });
+    expect(engine.tracks[0]!.plugins?.map((p) => p.catalogId)).toEqual(["waves-harmony-mono"]);
   });
 });
 
@@ -332,5 +506,27 @@ describe("loadNamedPluginV1 — postcondition (exactly one added, others unchang
     await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Serum 2", slots: {} });
     expect(engine.tracks[0]!.plugins?.length).toBe(1);
     expect(engine.tracks[1]!.plugins ?? []).toHaveLength(0);
+  });
+});
+
+// Step-1 slice 6 — same seam as explicitBalanceV1: the environment's turn provenance is
+// forwarded verbatim into batch_begin's args; absent ⇒ byte-identical args.
+describe("loadNamedPluginV1 — batch_begin provenance (step-1 slice 6)", () => {
+  it("forwards the environment's turn_id / source / utterance into batch_begin args", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Synth" })], "track-1", [plugin()]);
+    const provenance = { turn_id: "turn-8", source: "studio_skill", utterance: "load Serum 2" };
+    const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine, provenance), utterance: "load Serum 2", slots: {} });
+    expect(outcome).toMatchObject({ kind: "completed" });
+    expect(engine.batchBeginCalls).toHaveLength(1);
+    const args = engine.batchBeginCalls[0]!.args;
+    expect(args).toMatchObject({ name: PAYLOAD.id, turn_id: "turn-8", source: "studio_skill", utterance: "load Serum 2" });
+    expect(Object.keys(args)).toEqual(["transactionId", "name", "commands", "turn_id", "source", "utterance"]);
+  });
+
+  it("batch_begin args are unchanged when the environment carries no provenance", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Synth" })], "track-1", [plugin()]);
+    await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Serum 2", slots: {} });
+    expect(engine.batchBeginCalls).toHaveLength(1);
+    expect(Object.keys(engine.batchBeginCalls[0]!.args)).toEqual(["transactionId", "name", "commands"]);
   });
 });

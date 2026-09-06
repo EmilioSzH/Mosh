@@ -145,7 +145,12 @@ const midiNoteClipCount = (track: Track): number =>
 export function trackVolumeReachedV1(after: Snapshot, trackId: string, requestedDb: number): SkillCheck {
   const afterTrack = trackFor(after, trackId);
   if (!afterTrack) return { ok: false, reason: `Track "${trackId}" was not preserved.` };
-  if (typeof afterTrack.volumeDb !== "number" || Math.abs(afterTrack.volumeDb - requestedDb) > 1e-6)
+  // Step-1 repair (audit S5): the engine's fader stores a normalized POSITION and reads the dB
+  // back through it, so `set_track_volume -13` reads back -12.999998 (~2e-6 dB off, measured
+  // live). The old 1e-6 epsilon rolled every such commit back. 1e-4 dB clears that fader
+  // position round trip with margin and is still far finer than any spoken level — a wrong
+  // target (0.01 dB off, or the value never applied) still fails the check.
+  if (typeof afterTrack.volumeDb !== "number" || Math.abs(afterTrack.volumeDb - requestedDb) > 1e-4)
     return { ok: false, reason: `Track "${trackId}" did not reach ${requestedDb} dB.` };
   return { ok: true };
 }

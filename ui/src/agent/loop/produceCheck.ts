@@ -72,7 +72,7 @@ const NAME_TO_PC: Record<string, number> = {
  *  degree and the harmonic minor's raised 7th (PRODUCE_RULES's HARMONY rule:
  *  "D minor natural/harmonic: allow both 6th/7th degrees") — everything else
  *  (major, or an unrecognized mode) gets its single diatonic scale. */
-function scaleForms(mode: string): number[][] {
+export function scaleForms(mode: string): number[][] {
   const m = mode.trim().toLowerCase();
   if (m === "major") return [[0, 2, 4, 5, 7, 9, 11]];
   const natural = [0, 2, 3, 5, 7, 8, 10];
@@ -80,7 +80,7 @@ function scaleForms(mode: string): number[][] {
   return [natural, harmonic];
 }
 
-function tonicPc(tonic: string): number {
+export function tonicPc(tonic: string): number {
   const key = tonic.trim();
   const norm = key.length ? key[0]!.toUpperCase() + key.slice(1) : key;
   return NAME_TO_PC[norm] ?? NAME_TO_PC[key] ?? 0;
@@ -90,7 +90,7 @@ function tonicPc(tonic: string): number {
  *  `rootPc`, unioned across every allowed scale form. Empty when `rootPc` isn't
  *  a diatonic scale tone in ANY form (a chromatic 808 root — rare, but then
  *  nothing can be judged a "clash" against it). */
-function chordTonesForRoot(rootPc: number, tonic: number, forms: number[][]): Set<number> {
+export function chordTonesForRoot(rootPc: number, tonic: number, forms: number[][]): Set<number> {
   const rel = ((rootPc - tonic) % 12 + 12) % 12;
   const tones = new Set<number>();
   for (const scale of forms) {
@@ -101,6 +101,13 @@ function chordTonesForRoot(rootPc: number, tonic: number, forms: number[][]): Se
     }
   }
   return tones;
+}
+
+/** Pitch class -> a readable name. Sharps throughout: the prompt only needs the
+ *  model to recognise the tone, not to spell it correctly for a given key. */
+const PC_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
+export function pcName(pc: number): string {
+  return PC_NAMES[((pc % 12) + 12) % 12]!;
 }
 
 // ── note-level helpers ──────────────────────────────────────────────────────────

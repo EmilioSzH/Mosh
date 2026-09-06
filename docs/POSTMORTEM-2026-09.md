@@ -81,6 +81,9 @@ velocity, and register hard-coded by guardrails.
    with provenance; corrected output as next-round reference; 6-round cap) govern
    every loop, in every surface.
 
+
+> **Amended 2026-09-07 (pending owner signature):** rules 1–4 and 6 stand; the active loop, the Rule 2 interpretation, the Rule 3 ruling and the verdict-row definition are set by [docs/CONTRACT-AMENDMENT-2026-09-07.md](CONTRACT-AMENDMENT-2026-09-07.md). This section is history and is not edited.
+
 ## The approved direction (summary; full plan in the owner's plan file 2026-09-01)
 
 One loop, two surfaces, no re-platforming. ~/Mosh remains the platform. The
@@ -95,3 +98,5 @@ capture from mosh-log diffs promoted by a human). Composition modes ship as one
 per-role source matrix (MIDI+real-sound ↔ SA3 audio per role); frontier now,
 distill later (train only on ear-rated corpus); First-Stranger revives only after
 the keeper bar is met in Mosh — inverting the old order.
+
+> **Superseded 2026-09-07 (pending owner signature):** the weekly flywheel-lab obligation and the composition ear A/B prerequisite are replaced by the recording + mixing loop on the owner's own material; the produce lane is parked at round 4 with an unresolved causal diagnosis; the external playtest is off. See [docs/CONTRACT-AMENDMENT-2026-09-07.md](CONTRACT-AMENDMENT-2026-09-07.md) §3 and the current-commit audit [docs/pivot-2026-09/CAPABILITY-AUDIT-2026-09-05.md](pivot-2026-09/CAPABILITY-AUDIT-2026-09-05.md). The paragraph above is preserved as written on 2026-09-01.

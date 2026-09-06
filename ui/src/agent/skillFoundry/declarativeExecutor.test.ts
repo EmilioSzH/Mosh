@@ -53,7 +53,7 @@ class FakeEngine {
   /** Source-status generation returned on each successive `readSourceStatus()` call. */
   sourceStatusGenerations: readonly number[] = [];
   private sourceStatusCallIndex = 0;
-  readonly batchBeginCalls: { transactionId: string; name: string; commands: readonly { index: number; requestId: string; command: string }[] }[] = [];
+  readonly batchBeginCalls: { transactionId: string; name: string; commands: readonly { index: number; requestId: string; command: string }[]; args: Record<string, unknown> }[] = [];
 
   constructor(tracks: Track[], selectedTrackId: string | null) {
     this.tracks = tracks;
@@ -135,7 +135,7 @@ class FakeEngine {
     if (command === "batch_begin") {
       const transactionId = args.transactionId as string;
       const commands = args.commands as { index: number; requestId: string; command: string }[];
-      this.batchBeginCalls.push({ transactionId, name: args.name as string, commands });
+      this.batchBeginCalls.push({ transactionId, name: args.name as string, commands, args });
       const preFingerprint = this.fingerprint();
       const txn: FakeTxn = {
         status: "open", manifestCount: commands.length, applied: 0,
@@ -314,6 +314,21 @@ describe("executeDeclarativeSkillV1", () => {
     expect(engine.batchBeginCalls).toHaveLength(1);
     const commands = engine.batchBeginCalls[0]!.commands.map((c) => c.command);
     expect(commands).toEqual(["set_track_volume"]);
+  });
+
+  // Step-1 slice 6 — the declarative executor passes the environment's turn provenance (what
+  // it has) into batch_begin's args; absent ⇒ the args are byte-identical to before.
+  it("forwards the environment's provenance into batch_begin args, and leaves them unchanged when absent", async () => {
+    const provenance = { turn_id: "turn-9", source: "studio_skill", utterance: "set the bass to -6" };
+    await executeDeclarativeSkillV1(baseInput(engine, manifest(), { environment: { ...environmentFor(engine), provenance } }));
+    expect(engine.batchBeginCalls).toHaveLength(1);
+    expect(engine.batchBeginCalls[0]!.args).toMatchObject(provenance);
+    expect(Object.keys(engine.batchBeginCalls[0]!.args)).toEqual(["transactionId", "name", "commands", "turn_id", "source", "utterance"]);
+
+    const bare = new FakeEngine([track({ id: "track-1", name: "Bass", volumeDb: 0 })], "track-1");
+    await executeDeclarativeSkillV1(baseInput(bare, manifest()));
+    expect(bare.batchBeginCalls).toHaveLength(1);
+    expect(Object.keys(bare.batchBeginCalls[0]!.args)).toEqual(["transactionId", "name", "commands"]);
   });
 
   // ---------------------------------------------------------------------------------------

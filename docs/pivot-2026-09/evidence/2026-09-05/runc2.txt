@@ -1,0 +1,41 @@
+# runc2 — run-script: 11 command(s), 0 failure(s) — commit 0da6c638 — 2026-09-05
+# script:
+{"command":"set_master_volume","args":{"db":0}}
+{"command":"create_track","args":{"name":"Tone"},"capture":{"T":"trackId"}}
+{"command":"add_test_tone_clip","args":{"trackId":"${T}","seconds":2.0,"freq":220.0}}
+{"command":"export_audio","args":{"file":"fixture.wav","format":"wav","bitDepth":32,"range":"full","tail":"cut"}}
+{"command":"remove_track","args":{"trackId":"${T}"}}
+{"command":"create_track","args":{"name":"FIX"},"capture":{"F":"trackId"}}
+{"command":"import_clip","args":{"file":"fixture.wav","trackId":"${F}","startSeconds":0}}
+{"command":"export_audio","args":{"file":"out-before-save.wav","format":"wav","bitDepth":32,"range":"full","tail":"cut"}}
+{"command":"save_as","args":{"file":"fixture.mosh"}}
+{"command":"open_project","args":{"file":"fixture.mosh"}}
+{"command":"__snapshot","args":{"label":"reopened"}}
+{"command":"export_audio","args":{"file":"out.wav","format":"wav","bitDepth":32,"range":"full","tail":"cut"}}
+# parsed result lines:
+set_master_volume: ok=True err= data=
+create_track: ok=True err= data={"trackId": "1010", "type": "audio", "isInstrument": false, "muteGateIndex": 0}
+import_clip: ok=True err= data={"clipId": "1014", "trackId": "1010", "file": "/Users/emiliosanchez-harris/Library/Mosh/_harness/pivot-fixture2/imports/tone-220.wav"}
+export_audio: ok=True err= data={"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/
+remove_track: ok=True err= data=
+create_track: ok=True err= data={"trackId": "1015", "type": "audio", "isInstrument": false, "muteGateIndex": 0}
+import_clip: ok=True err= data={"clipId": "1019", "trackId": "1015", "file": "/Users/emiliosanchez-harris/Library/Mosh/_harness/pivot-fixture2/imports/fixture.wav"}
+export_audio: ok=True err= data={"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/
+save_as: ok=True err= data={"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/
+open_project: ok=True err= data={"editFile": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratch
+[snapshot reopened] master=-2.384185791015625e-07 revision=n/a
+   track 1015 'FIX' vol=0.0 sends=[] plugins=[]
+   buses=[]
+export_audio: ok=True err= data={"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/
+# txn stamps:
+1 set_master_volume undoable 3e2255d8:1
+2 create_track undoable 3e2255d8:2
+3 import_clip undoable 3e2255d8:3
+4 export_audio - 3e2255d8:3
+5 remove_track undoable 3e2255d8:4
+6 create_track undoable 3e2255d8:5
+7 import_clip undoable 3e2255d8:6
+8 export_audio - 3e2255d8:6
+9 save_as - 3e2255d8:6
+10 open_project - 3e2255d8:0
+11 export_audio - 3e2255d8:0

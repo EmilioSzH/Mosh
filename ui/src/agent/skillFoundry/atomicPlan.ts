@@ -25,6 +25,7 @@ import type {
   TxnStatus,
 } from "../skillHarness";
 import type { SkillTransactionPlan } from "../skillTransaction";
+import type { StudioSkillProvenanceV1 } from "./contracts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -55,7 +56,27 @@ export type AtomicSkillPlanV1 = {
     after: Snapshot,
     changes: SkillExecutionSummary,
   ) => SkillCheck | Promise<SkillCheck>;
+  /** Step-1 slice 6 — optional turn provenance for the batch_begin marker. The engine logs
+   *  batch_begin's args verbatim and stamps `turn_id` as a sibling on every JSONL line of
+   *  the transaction. Absent ⇒ the batch_begin args are byte-identical to before; a key
+   *  whose value is empty is omitted, never sent as an empty string. */
+  readonly provenance?: AtomicSkillProvenanceV1;
 };
+
+/** The same shape `StudioSkillEnvironmentV1.provenance` carries — a caller that has an
+ *  environment passes it through unchanged (explicitBalance.ts, loadNamedPlugin.ts,
+ *  declarativeExecutor.ts); the static-catalog adapter (skillHarness.ts) has none and passes
+ *  nothing. */
+export type AtomicSkillProvenanceV1 = StudioSkillProvenanceV1;
+
+function provenanceArgs(provenance: AtomicSkillProvenanceV1 | undefined): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  if (!provenance) return args;
+  if (provenance.turn_id) args.turn_id = provenance.turn_id;
+  if (provenance.source) args.source = provenance.source;
+  if (provenance.utterance) args.utterance = provenance.utterance;
+  return args;
+}
 
 export type AtomicSkillGuardContextV1 = {
   readonly skill: string;
@@ -222,6 +243,7 @@ export async function runAtomicSkillPlanV1(
       transactionId: transaction.transactionId,
       name: transaction.name,
       commands: transaction.manifest,
+      ...provenanceArgs(plan.provenance),
     });
   } catch (error) {
     // A rejected begin promise is ambiguous: the transaction may or may not be open.
