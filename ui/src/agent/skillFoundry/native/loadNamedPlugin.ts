@@ -263,6 +263,7 @@ async function runAtomicLoadV1(
     before,
     transaction,
     verifyPostcondition: (_before, after) => verifyPluginAddedOnceV1(before, after, trackId, catalogId),
+    provenance: environment.provenance, // step-1 slice 6 — the turn's turn_id/source/utterance
   };
 
   const result = await runAtomicSkillPlanV1(plan, { snapshot: environment.snapshot, exec: environment.exec, guard });

@@ -289,6 +289,30 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
       expect(engine.tracks[0]?.mute).toBe(true);
     });
 
+    // Step-1 slice 6 — a studio-skill transaction is a TURN: its batch_begin args carry the
+    // composer's turn provenance (a fresh turn_id per run, the lane as `source`, the verbatim
+    // ask as `utterance`), so the engine stamps turn_id on every in-batch JSONL line and a
+    // correction-round reader can group the transaction under the ask that caused it.
+    it("explicit-balance: the served ask's batch_begin carries turn_id / source / utterance, with a fresh turn_id per run", async () => {
+      await send("mute it");
+      await send("unmute it");
+      const begins = exec.mock.calls
+        .filter(([command]) => command === "batch_begin")
+        .map(([, args]) => args as Record<string, unknown>);
+      expect(begins).toHaveLength(2);
+      const [first, second] = begins as [Record<string, unknown>, Record<string, unknown>];
+      expect(first).toMatchObject({ source: "studio_skill", utterance: "mute it" });
+      expect(typeof first.turn_id).toBe("string");
+      expect(first.turn_id).not.toBe("");
+      expect(second).toMatchObject({ source: "studio_skill", utterance: "unmute it" });
+      expect(second.turn_id).not.toBe(first.turn_id);
+      // The atomic-plan keys are untouched — provenance rides BESIDE them, in a fixed order.
+      expect(Object.keys(first)).toEqual(["transactionId", "name", "commands", "turn_id", "source", "utterance"]);
+      // One value, two carriers: every command of the turn also names the lane on its envelope.
+      expect(exec.mock.calls.every(([, , , origin]) => origin === "studio_skill")).toBe(true);
+      expect(engine.tracks[0]?.mute).toBe(false);
+    });
+
     it("load-named-plugin: 'could you load ott' reaches the runtime", async () => {
       await send("could you load ott");
       expect(runtimeSpy.calls).toEqual([{ utterance: "could you load ott", token: undefined }]);

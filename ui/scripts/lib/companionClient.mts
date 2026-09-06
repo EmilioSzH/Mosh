@@ -37,6 +37,12 @@ import { join } from "node:path";
 import type { Snapshot } from "../../src/types";
 
 export const DEFAULT_COMPANION_URL = "http://127.0.0.1:47873";
+// Step-1 slice 6 — the `origin` sibling every /command envelope carries beside
+// command/args. RemoteCompanionServer hands the whole `command` object to
+// MoshOps::execute, which reads `origin` at its outermost call and stamps it on
+// every JSONL line the command writes (absent ⇒ the engine stamps "native", and a
+// correction-round reader could not tell a driver edit from an engine-internal one).
+export const DEFAULT_COMPANION_ORIGIN = "produce_driver";
 export const DEFAULT_LOG_PATH = join(homedir(), "Library", "Mosh", "session", "mosh-log.jsonl");
 const TIMED_OUT_ERROR = /message-thread call timed out/i;
 
@@ -58,7 +64,16 @@ export type CompanionClientConfig = {
 export type CompanionClient = {
   health(): Promise<boolean>;
   snapshot(): Promise<Snapshot>;
-  command(name: string, args?: Record<string, unknown>, opts?: { timeoutMs?: number; fallbackTimeoutMs?: number }): Promise<CommandResult>;
+  command(
+    name: string,
+    args?: Record<string, unknown>,
+    opts?: {
+      timeoutMs?: number;
+      fallbackTimeoutMs?: number;
+      /** The envelope's `origin` sibling (default DEFAULT_COMPANION_ORIGIN). */
+      origin?: string;
+    },
+  ): Promise<CommandResult>;
   eventsSince(since: number): Promise<{ events: unknown[]; now?: number } | unknown>;
 };
 
@@ -187,7 +202,9 @@ export function makeCompanionClient(cfg: CompanionClientConfig): CompanionClient
     async command(name, args = {}, opts = {}) {
       const timeoutMs = opts.timeoutMs ?? defaultTimeoutMs;
       const baseline = currentLogSize(logPath);
-      const body = { token: cfg.token, command: { command: name, args }, timeoutMs };
+      // `origin` rides BESIDE command/args (never inside args), like the WebView's own
+      // envelope — the {command, args} shape is otherwise unchanged.
+      const body = { token: cfg.token, command: { command: name, args, origin: opts.origin ?? DEFAULT_COMPANION_ORIGIN }, timeoutMs };
       let resp: { ok?: boolean; error?: string; data?: unknown } | undefined;
       try {
         resp = (await postJson(`${url}/command`, body, timeoutMs + 5_000)) as typeof resp;

@@ -25,6 +25,7 @@ import type {
   TxnStatus,
 } from "../skillHarness";
 import type { SkillTransactionPlan } from "../skillTransaction";
+import type { StudioSkillProvenanceV1 } from "./contracts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -62,11 +63,11 @@ export type AtomicSkillPlanV1 = {
   readonly provenance?: AtomicSkillProvenanceV1;
 };
 
-export type AtomicSkillProvenanceV1 = {
-  readonly turn_id?: string;
-  readonly source?: string;
-  readonly utterance?: string;
-};
+/** The same shape `StudioSkillEnvironmentV1.provenance` carries — a caller that has an
+ *  environment passes it through unchanged (explicitBalance.ts, loadNamedPlugin.ts,
+ *  declarativeExecutor.ts); the static-catalog adapter (skillHarness.ts) has none and passes
+ *  nothing. */
+export type AtomicSkillProvenanceV1 = StudioSkillProvenanceV1;
 
 function provenanceArgs(provenance: AtomicSkillProvenanceV1 | undefined): Record<string, unknown> {
   const args: Record<string, unknown> = {};

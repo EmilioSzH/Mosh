@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Snapshot, Track } from "../../../types";
-import type { NativeSkillPayloadV1, StudioSkillEnvironmentV1 } from "../contracts";
+import type { NativeSkillPayloadV1, StudioSkillEnvironmentV1, StudioSkillProvenanceV1 } from "../contracts";
 import { loadNamedPluginV1, parsePluginCatalogV1, pluginQueryV1 } from "./loadNamedPlugin";
 
 type FakeBridgeResult = { readonly ok: boolean; readonly error?: string; readonly data?: unknown };
@@ -32,7 +32,7 @@ class FakeEngine {
   failLoadReason = "instrument on an audio track";
   private sourceStatusCallIndex = 0;
   private readonly txns = new Map<string, FakeTxn>();
-  readonly batchBeginCalls: { transactionId: string; commands: readonly { command: string }[] }[] = [];
+  readonly batchBeginCalls: { transactionId: string; commands: readonly { command: string }[]; args: Record<string, unknown> }[] = [];
 
   constructor(tracks: Track[], selectedTrackId: string | null, plugins: FakePlugin[]) {
     this.tracks = tracks;
@@ -89,7 +89,7 @@ class FakeEngine {
     if (command === "batch_begin") {
       const transactionId = args.transactionId as string;
       const commands = args.commands as { index: number; requestId: string; command: string }[];
-      this.batchBeginCalls.push({ transactionId, commands });
+      this.batchBeginCalls.push({ transactionId, commands, args });
       const preFingerprint = this.fingerprint();
       const txn: FakeTxn = {
         status: "open", manifestCount: commands.length, applied: 0,
@@ -143,9 +143,10 @@ function track(overrides: Partial<Track> = {}): Track {
   return { id: "track-1", index: 0, name: "Bass", type: "audio", clips: [], ...overrides };
 }
 
-function environmentFor(engine: FakeEngine): StudioSkillEnvironmentV1 {
+function environmentFor(engine: FakeEngine, provenance?: StudioSkillProvenanceV1): StudioSkillEnvironmentV1 {
   let counter = 0;
   return {
+    ...(provenance ? { provenance } : {}),
     context: () => engine.context(),
     snapshot: async () => engine.snapshot(),
     exec: (command, args, transaction) => engine.exec(command, args as Record<string, unknown>, transaction),
@@ -385,5 +386,27 @@ describe("loadNamedPluginV1 — postcondition (exactly one added, others unchang
     await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Serum 2", slots: {} });
     expect(engine.tracks[0]!.plugins?.length).toBe(1);
     expect(engine.tracks[1]!.plugins ?? []).toHaveLength(0);
+  });
+});
+
+// Step-1 slice 6 — same seam as explicitBalanceV1: the environment's turn provenance is
+// forwarded verbatim into batch_begin's args; absent ⇒ byte-identical args.
+describe("loadNamedPluginV1 — batch_begin provenance (step-1 slice 6)", () => {
+  it("forwards the environment's turn_id / source / utterance into batch_begin args", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Synth" })], "track-1", [plugin()]);
+    const provenance = { turn_id: "turn-8", source: "studio_skill", utterance: "load Serum 2" };
+    const outcome = await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine, provenance), utterance: "load Serum 2", slots: {} });
+    expect(outcome).toMatchObject({ kind: "completed" });
+    expect(engine.batchBeginCalls).toHaveLength(1);
+    const args = engine.batchBeginCalls[0]!.args;
+    expect(args).toMatchObject({ name: PAYLOAD.id, turn_id: "turn-8", source: "studio_skill", utterance: "load Serum 2" });
+    expect(Object.keys(args)).toEqual(["transactionId", "name", "commands", "turn_id", "source", "utterance"]);
+  });
+
+  it("batch_begin args are unchanged when the environment carries no provenance", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Synth" })], "track-1", [plugin()]);
+    await loadNamedPluginV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "load Serum 2", slots: {} });
+    expect(engine.batchBeginCalls).toHaveLength(1);
+    expect(Object.keys(engine.batchBeginCalls[0]!.args)).toEqual(["transactionId", "name", "commands"]);
   });
 });
