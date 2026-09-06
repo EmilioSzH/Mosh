@@ -15,7 +15,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../store";
-import type { CommandResult, Snapshot, Track } from "../types";
+import type { Bus, CommandResult, Snapshot, Track } from "../types";
 
 const runtimeSpy = vi.hoisted(() => ({
   calls: [] as { utterance: string; token: string | undefined }[],
@@ -91,6 +91,7 @@ type FakeTxn = {
 class FakeEngine {
   tracks: Track[];
   plugins: FakePlugin[] = [];
+  buses: Bus[] = [];
   projectEpoch = 1;
   transportPlaying = false;
   private stateVersion = 0;
@@ -107,7 +108,8 @@ class FakeEngine {
       schemaVersion: 1,
       session: { sampleRate: 48_000, tempo: 120, editFile: "/tmp/moshi-skill-foundry.mosh", key: { tonic: "C", mode: "major" }, dirty: false },
       transport: { playing: this.transportPlaying, recording: false, position: 0, looping: false, loopStart: 0, loopEnd: 0 },
-      tracks: this.tracks.map((t) => ({ ...t })),
+      tracks: this.tracks.map((t) => ({ ...t, ...(t.sends ? { sends: t.sends.map((s) => ({ ...s })) } : {}) })),
+      ...(this.buses.length ? { buses: this.buses.map((b) => ({ ...b })) } : {}),
     };
   }
 
@@ -118,6 +120,21 @@ class FakeEngine {
       track.mute = args.mute as boolean;
       return { ok: true, command };
     }
+    // Step-1 slice 5 — the deterministic balance lane's two mutations, plus the one it must
+    // never issue (F3: a real engine would happily create the send).
+    if (command === "set_track_volume") {
+      const track = this.tracks.find((t) => t.id === args.trackId);
+      if (!track) return { ok: false, command, error: "no such track" };
+      track.volumeDb = args.db as number;
+      return { ok: true, command };
+    }
+    if (command === "set_send_level") {
+      const send = this.tracks.find((t) => t.id === args.trackId)?.sends?.find((s) => s.bus === args.bus);
+      if (!send) return { ok: false, command, error: "no such send" };
+      send.db = args.db as number;
+      return { ok: true, command };
+    }
+    if (command === "add_send") return { ok: false, command, error: "add_send must never be issued by explicit-balance" };
     if (command === "set_transport") {
       if (args.action === "play") this.transportPlaying = true;
       if (args.action === "stop") this.transportPlaying = false;
@@ -403,6 +420,79 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
       loopControls.allowed = true;
       await send("record a verse then loop it then mute the drums");
       expect(loopControls.calls).toEqual(["record a verse then loop it then mute the drums"]);
+    });
+  });
+
+  // Step-1 repair — the independent audit's four failures (S5, S8, F1, F3), typed into the
+  // real composer against the audit fixture (Vocal -10 dB with a -12 dB Reverb send, Drums
+  // with no send, the Reverb return). The loop gate is OPEN in every case so the assertion
+  // "the loop was never consulted" is about precedence, not the gate: the studio-skill
+  // runtime claims each ask deterministically and the turn ends there.
+  describe("deterministic balance lane — audit-derived cases (step-1 slice 5)", () => {
+    const MARKERS = new Set(["batch_begin", "batch_status", "batch_end", "batch_rollback", "list_plugins"]);
+    const mutations = () => exec.mock.calls.filter(([command]) => !MARKERS.has(command)).map(([command, args]) => [command, args]);
+    const vocal = () => engine.tracks.find((t) => t.id === "v")!;
+
+    const loadAuditFixture = (extra: Track[] = []) => {
+      loopControls.allowed = true;
+      engine.tracks = [
+        { id: "v", index: 0, name: "Vocal", type: "audio", clips: [], volumeDb: -10, sends: [{ bus: 0, db: -12, mute: false }] },
+        { id: "d", index: 1, name: "Drums", type: "audio", clips: [], volumeDb: 0 },
+        { id: "r", index: 2, name: "Reverb", type: "return", clips: [], isReturn: true, returnBus: 0 },
+        ...extra,
+      ];
+      engine.buses = [{ bus: 0, name: "Reverb", trackId: "r" }];
+      act(() => { useStore.setState({ snapshot: engine.snapshot(), selectedTrackId: null }); });
+    };
+
+    it("S5: 'set the vocal to -13 dB' is served by the studio skill — one set_track_volume, the loop never consulted", async () => {
+      loadAuditFixture();
+      await send("set the vocal to -13 dB");
+      expect(runtimeSpy.calls).toEqual([{ utterance: "set the vocal to -13 dB", token: undefined }]);
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([["set_track_volume", { trackId: "v", db: -13 }]]);
+      expect(exec.mock.calls.map(([command]) => command)).toEqual(["batch_begin", "set_track_volume", "batch_status", "batch_end"]);
+      expect(vocal().volumeDb).toBe(-13);
+      expect(say()).toBe("Vocal → −13 dB");
+    });
+
+    it("S8: 'set the vocal reverb send to -18 dB' is served — one set_send_level {Vocal, Reverb, -18}, the loop never consulted", async () => {
+      loadAuditFixture();
+      await send("set the vocal reverb send to -18 dB");
+      expect(runtimeSpy.calls).toHaveLength(1);
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([["set_send_level", { trackId: "v", bus: 0, db: -18 }]]);
+      expect(vocal().sends?.[0]?.db).toBe(-18);
+      expect(vocal().volumeDb).toBe(-10);
+      expect(say()).toBe("Vocal → Reverb send −18 dB");
+    });
+
+    it("F1: 'lower the vocals 3 dB' with Vocal and Vocal 2 asks which — no command, no loop; the answer moves only the chosen track", async () => {
+      loadAuditFixture([{ id: "v2", index: 3, name: "Vocal 2", type: "audio", clips: [], volumeDb: -8 }]);
+      await send("lower the vocals 3 dB");
+      expect(loopControls.calls).toEqual([]);
+      expect(exec.mock.calls).toEqual([]);                       // not even a marker: nothing was issued
+      expect(say()).toContain("choose 1–2");
+      expect(say()).toContain("1. Vocal;");
+      expect(say()).toContain("2. Vocal 2");
+      expect(vocal().volumeDb).toBe(-10);
+
+      await send("2");
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([["set_track_volume", { trackId: "v2", db: -11 }]]);
+      expect(engine.tracks.find((t) => t.id === "v2")?.volumeDb).toBe(-11);
+      expect(vocal().volumeDb).toBe(-10);
+    });
+
+    it("F3: 'more reverb on the drums' with no Drums→Reverb send is blocked — no add_send, no mutation, no loop", async () => {
+      loadAuditFixture();
+      await send("more reverb on the drums");
+      expect(runtimeSpy.calls).toHaveLength(1);
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([]);
+      expect(exec.mock.calls.map(([command]) => command)).not.toContain("add_send");
+      expect(say()).toBe("Drums has no send to Reverb — add one first");
+      expect(engine.tracks.find((t) => t.id === "d")?.sends).toBeUndefined();
     });
   });
 });

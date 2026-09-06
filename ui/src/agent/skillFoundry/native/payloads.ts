@@ -119,11 +119,19 @@ export const EXPLICIT_BALANCE_PAYLOAD_V1: NativeSkillPayloadV1 = {
   implementation: "native",
   handlerKey: "explicitBalanceV1",
   title: "Focus and basic explicit balance",
-  description: "Mute, unmute, or solo a uniquely resolved track, or set it to an explicit dB level.",
+  description: "Mute, unmute, or solo a uniquely resolved track; set or move its fader by an explicit dB amount; set or move one of its existing sends; repeat the last move.",
   intents: {
-    positiveExamples: ["set drums to -6 dB", "mute the vocals", "solo the bass", "unmute the guitar"],
+    // Step-1 slice 5 ("Deterministic balance") — the relative / send / repeat vocabulary the
+    // runtime claims deterministically (matchers.ts) BEFORE the router can hand the ask to the
+    // loop. The first four examples are the pre-existing set, kept verbatim.
+    positiveExamples: [
+      "set drums to -6 dB", "mute the vocals", "solo the bass", "unmute the guitar",
+      "set the vocal to -13 dB", "lower the vocal 3 dB", "turn the drums down 2 dB", "raise the drums 2 dB",
+      "set the vocal reverb send to -18 dB", "more reverb on the vocal", "less reverb on the vocal by 6 dB",
+      "another 3 dB",
+    ],
     negativeExamples: ["mix this", "make it sound professional", "master this"],
-    tags: ["mixing", "levels"],
+    tags: ["mixing", "levels", "sends"],
   },
   slots: [],
   execution: { mode: "atomic", confirmation: "never" },
