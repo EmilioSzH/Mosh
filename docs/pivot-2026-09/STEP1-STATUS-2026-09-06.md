@@ -52,12 +52,15 @@ Every failure the first audit found is fixed and verified live through the real 
 
 ## Two findings outside the matrix
 
-- **After a crash, every deterministic skill is refused until the banner is dismissed.**
-  Reproducible: with a recovery journal pending, three balance asks in a row answered "I couldn't
-  do that." with no commands, while the fast path kept working; dismissing the banner made the
-  same ask succeed. Mechanism: `cmdBatchBegin` refuses a new transaction while a previous one is
-  still open (`MoshOps.cpp` ~1245), and a crash can leave one open until `discard_recovery`. The
-  message tells the user nothing. This defeats step 1's headline capability after any crash.
+- **A stale ledger entry disables every deterministic skill.** The audit saw this after a crash,
+  and I first recorded it as a crash bug. **That framing was wrong** (root-caused 2026-09-06,
+  reproduced 3/3 headlessly): the trigger is a non-terminal transaction record at startup, which a
+  clean exit with an open transaction produces, and which a transaction that merely **failed and
+  said so** also produces. It is not gated on a crash, it is not cleared by opening another
+  project, and once the recovery banner is gone the Dismiss button goes with it while the block
+  stays, with nothing in the snapshot naming it. The real guard is the unresolved-ledger check at
+  `MoshOps.cpp` ~1218, not the open-transaction check at ~1245 that I first cited. Full account and
+  the fix: [BRIEF-STEP2-A-UNRESOLVED-TRANSACTION-BLOCK.md](BRIEF-STEP2-A-UNRESOLVED-TRANSACTION-BLOCK.md).
 - **One SIGSEGV** during an optional step, in JUCE main-menu teardown. Nothing in the diff touches
   menus. Attribution unknown, observed once, not reproduced.
 
@@ -88,6 +91,8 @@ first item of step 2. Consequences, recorded so nothing is quietly lost:
 - F6 stays unknown (not inducible through the companion or GUI surface) and F4 stays half exercised.
   Neither is a pass; both are carried.
 - The one SIGSEGV in menu teardown stays unattributed. If it recurs, attribute it before releasing.
+- The step-2 item A brief was written from a root cause, not from the audit's symptom, and it
+  corrects this document's original description of that finding.
 - Merging to main is a separate decision and needs the native gate
   (`scripts/auto-loop/gate.sh native <worktree> origin/main`). Nothing has been pushed or merged.
 
