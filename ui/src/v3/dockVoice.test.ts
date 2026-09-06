@@ -10,7 +10,9 @@ class FakeSpeechRecognition {
   continuous = false;
   interimResults = false;
   lang = "";
-  onresult: ((e: { resultIndex: number; results: Array<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null = null;
+  // Matches SpeechRec's own signature (dockVoice.ts): a result entry's [0] alternative is
+  // OPTIONAL there, and a handler that demanded it would not be assignable to that type.
+  onresult: ((e: { resultIndex: number; results: Array<{ isFinal: boolean; 0?: { transcript: string } }> }) => void) | null = null;
   onerror: ((e: { error?: string }) => void) | null = null;
   onend: (() => void) | null = null;
 }

@@ -27,7 +27,6 @@ export function MoshiDock() {
   const setAgentBusy = useStore((s) => s.setAgentBusy);
   const setAgentChangeSet = useStore((s) => s.setAgentChangeSet);
   const pushAgentUtter = useStore((s) => s.pushAgentUtter);
-  const setAgentListening = useStore((s) => s.setAgentListening);
   const recording = useStore((s) => s.transport.recording);
   const celebrateTick = useStore((s) => s.celebrateTick);
   const changeSet = useStore((s) => s.agentChangeSet);
@@ -61,9 +60,8 @@ export function MoshiDock() {
       setSay(null);
       voiceRef.current?.stop();
       setListening(false);
-      setAgentListening(false);
     }
-  }, [safe, setAgentListening]);
+  }, [safe]);
 
   const buildSkillEnvironment = (text: string): StudioSkillEnvironmentV1 => ({
     context: () => {
@@ -204,11 +202,11 @@ export function MoshiDock() {
   const ensureVoice = (): DockVoice => {
     if (!voiceRef.current) {
       voiceRef.current = createDockVoice({
-        onStart: () => { setListening(true); setAgentListening(true); setInput(""); },
+        onStart: () => { setListening(true); setInput(""); },
         onInterim: (t) => setInput(t),
-        onStop: () => { setListening(false); setAgentListening(false); },
+        onStop: () => { setListening(false); },
         onFinal: (t) => void run(t, "push_to_talk"),
-        onError: () => { setListening(false); setAgentListening(false); setSay("didn't catch that"); },
+        onError: () => { setListening(false); setSay("didn't catch that"); },
       });
     }
     return voiceRef.current;

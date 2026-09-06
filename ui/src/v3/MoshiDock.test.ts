@@ -35,7 +35,6 @@ describe("v3 Moshi dock", () => {
       setAgentBusy: vi.fn(),
       setAgentChangeSet: vi.fn(),
       pushAgentUtter: vi.fn(),
-      setAgentListening: vi.fn(),
     });
     requestMic.mockReset();
     requestMic.mockResolvedValue({ status: "granted" });
