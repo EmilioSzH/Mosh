@@ -1,0 +1,24 @@
+# --selftest excerpt (candidate ccdaab85, Release binary 2026-09-05 19:23)
+142:--- STEP1-PROV: origin + turn_id on JSONL lines; session.revision ---
+143-  ok   STEP1-PROV session.revision is present in the snapshot
+144-  ok   STEP1-PROV native set_track_volume ok
+145-  ok   STEP1-PROV session.revision increased across set_track_volume
+146-  ok   STEP1-PROV origin-stamped set_track_volume ok
+147-  ok   STEP1-PROV executeFromUi set_track_volume ok
+148-  ok   STEP1-PROV batch_begin{turn_id} ok
+--
+167:  ..   section "STEP1-PROV: origin + turn_id on JSONL lines; session.revision" completed in 0.002s (24 checks, 0 failed)
+168---- Stage 2: arrangement + mixer ---
+169-  ok   set_track_icon accepts a known icon name
+170-  ok   set_track_icon: the icon reaches the snapshot
+...
+  ok   set_send_level refuses a non-finite db
+  ok   a refused non-finite set_send_level mutates nothing (canonical snapshot equal)
+  ok   set_send_level ONE undo restores the canonical snapshot
+  ok   set_send_mute ONE undo restores the canonical snapshot
+  ok   set_send_pan ONE undo restores the canonical snapshot
+  ok   matrix: save/reload round-trips EVERY mutated field (canonical snapshot equal)
+...
+===== 3537/3537 checks passed, 0 failed =====
+
+Cleaning up temp files..

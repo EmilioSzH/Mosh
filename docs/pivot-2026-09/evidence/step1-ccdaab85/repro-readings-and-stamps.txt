@@ -1,0 +1,23 @@
+[base] revision=6 vol=-10.0 sends=[(0, -12.0)]
+[after_fader] revision=7 vol=-12.999998092651367 sends=[(0, -12.0)]
+[after_send] revision=8 vol=-12.999998092651367 sends=[(0, -18.0)]
+[undo_send_immediate] revision=9 vol=-12.999998092651367 sends=[(0, -12.0)]
+[undo_send_pumped] revision=9 vol=-12.999998092651367 sends=[(0, -12.0)]
+[undo_fader] revision=10 vol=-10.0 sends=[(0, -12.0)]
+[reopened] revision=10 vol=-10.0 sends=[(0, -12.0)]
+1 create_track undoable d6386ac6:1 origin=native turn=None
+2 import_clip undoable d6386ac6:2 origin=native turn=None
+3 create_bus undoable d6386ac6:3 origin=native turn=None
+4 load_builtin undoable d6386ac6:4 origin=native turn=None
+5 add_send undoable d6386ac6:5 origin=native turn=None
+6 set_track_volume undoable d6386ac6:6 origin=native turn=None
+7 export_audio - d6386ac6:6 origin=native turn=None
+8 batch_begin - d6386ac6:6 origin=native turn=probe-1
+9 set_track_volume undoable d6386ac6:7 origin=native turn=probe-1
+10 batch_end - d6386ac6:7 origin=native turn=probe-1
+11 set_send_level undoable d6386ac6:8 origin=native turn=None
+12 undo - d6386ac6:7 origin=native turn=None
+13 undo - d6386ac6:6 origin=native turn=None
+14 export_audio - d6386ac6:6 origin=native turn=None
+15 save_as - d6386ac6:9 origin=native turn=None
+16 open_project - d6386ac6:0 origin=native turn=None
