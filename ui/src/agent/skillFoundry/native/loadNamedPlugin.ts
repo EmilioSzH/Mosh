@@ -19,6 +19,17 @@
 // an add/insert/put ask with NO catalog match answers `unsupported` (the runtime's
 // own no-match shape) so AgentComposer proceeds to the router; "load X" with no match
 // keeps `missing_target` — a producer who says "load" means a plug-in.
+//
+// Repair after the slice-2 audit (2026-09-05): (1) for add/insert/put the catalog match
+// is resolved BEFORE the selected-track guard — with nothing selected, "add a counter
+// phrase" used to stop at "Select the track…" (studio_skill_blocked) and never reach the
+// router; now no match ⇒ `unsupported` regardless of selection, and only a claimed match
+// with no selection earns the select-a-track guidance. "load X" keeps its guard-first
+// order. (2) Raising the cap made `resolvePluginMatch`'s rank-3 substring test live
+// against 1,198 installed names, so a single common part word ("add a harmony" → Waves
+// Harmony Mono) was claimed and a load transaction opened; under add/insert/put such a
+// query only claims an exact or prefix match (`PART_WORD_QUERY_V1`). "load X" is
+// unchanged either way.
 
 import type { AvailablePlugin, Snapshot } from "../../../types";
 import { addPluginRecent, installedEntry, resolvePluginMatch, type PluginEntry } from "../../../ui/pluginBrowserUtil";
@@ -48,6 +59,41 @@ const MAX_PLUGIN_CATALOG_V1 = 4_096;
 const MAX_PLUGIN_FIELD_LENGTH_V1 = 1_024;
 
 type PluginVerbV1 = "load" | "add" | "insert" | "put";
+
+// Common part words a producer says after add/insert/put when asking for MUSIC, not a
+// plug-in. Matched against the normalized query (below), singular or plural. Under those
+// verbs such a query never claims a plug-in through the substring rank — only an exact or
+// prefix match counts — because with a real 1,198-entry catalog almost every one of these
+// words sits inside some installed plug-in's name.
+const PART_WORD_QUERY_V1 =
+  /^(?:(?:counter )?(?:phrases?|melod(?:y|ies)|harmon(?:y|ies))|hooks?|riffs?|fills?|bass ?lines?|chords?|layers?|parts?)$/;
+
+// Mirrors pluginBrowserUtil.ts's private `normalizePluginText` (NFKD, lower-case, runs of
+// non-alphanumerics collapsed to one space) so the prefix test below sees the same text
+// `resolvePluginMatch` ranks. Kept local: that module is outside this slice's file map.
+const normalizePluginTextV1 = (value: string): string =>
+  value.normalize("NFKD").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+function isPartWordQueryV1(query: string): boolean {
+  return PART_WORD_QUERY_V1.test(normalizePluginTextV1(query));
+}
+
+// The entries `resolvePluginMatch` would rank 0–2 (exact name, exact vendor+name, or a
+// prefix of either ordering); everything it could only reach through its rank-3
+// `includes` test is dropped. Ranking the filtered set is therefore identical to ranking
+// the full set whenever an exact/prefix entry exists, and "none" when only substring
+// entries did.
+function exactOrPrefixEntriesV1(entries: readonly PluginEntry[], rawQuery: string): readonly PluginEntry[] {
+  const query = normalizePluginTextV1(rawQuery);
+  if (!query) return [];
+  return entries.filter((entry) => {
+    const name = normalizePluginTextV1(entry.name);
+    const vendor = normalizePluginTextV1(entry.vendor);
+    return name.startsWith(query)
+      || `${vendor} ${name}`.trim().startsWith(query)
+      || `${name} ${vendor}`.trim().startsWith(query);
+  });
+}
 
 const LOAD_PLUGIN_UTTERANCE_V1 =
   /^(?:(?:can|could|would|will)\s+you\s+|please\s+|hey\s+moshi[, ]+)*(load|add|insert|put)\s+(?:(?:the|a)\s+)?(?:plugin\s+)?(.+?)(?:\s+(?:on|onto)\s+(?:the\s+)?(?:selected|current|this)\s+track)?[?!.]*$/i;
@@ -194,6 +240,22 @@ function verifyPluginAddedOnceV1(before: Snapshot, after: Snapshot, trackId: str
 
 function blocked(payload: NativeSkillPayloadV1, code: SkillReasonCodeV1, say: string): SkillOutcomeV1 {
   return { kind: "blocked", skill: payload.id, version: payload.version, code, say, unserved: true };
+}
+
+// The selected-track guard as a value, so the handler can decide WHEN to apply it (before
+// the catalog read for "load", after the match for add/insert/put) without duplicating
+// the guidance text.
+type SelectedTrackV1 =
+  | { readonly ok: true; readonly track: { readonly id: string; readonly name: string } }
+  | { readonly ok: false; readonly outcome: SkillOutcomeV1 };
+
+function selectedTrackV1(payload: NativeSkillPayloadV1, context: ReturnType<StudioSkillEnvironmentV1["context"]>): SelectedTrackV1 {
+  if (!context.selectedTrackId) {
+    return { ok: false, outcome: blocked(payload, "missing_target", "Select the track you want me to load it on.") };
+  }
+  const track = context.tracks.find((candidate) => candidate.id === context.selectedTrackId);
+  if (!track) return { ok: false, outcome: blocked(payload, "stale_context", "That selected track is no longer available.") };
+  return { ok: true, track };
 }
 
 function mismatchGuidance(error: string): string {
@@ -379,17 +441,14 @@ export const loadNamedPluginV1: NativeSkillHandlerV1 = async ({ payload, environ
     : parsed.query;
 
   const initial = environment.context();
-  if (!initial.selectedTrackId) return blocked(payload, "missing_target", "Select the track you want me to load it on.");
-  const track = initial.tracks.find((candidate) => candidate.id === initial.selectedTrackId);
-  if (!track) return blocked(payload, "stale_context", "That selected track is no longer available.");
-
-  let before: Snapshot;
-  try {
-    before = await environment.snapshot();
-  } catch (error) {
-    return blocked(payload, "observation_failed", `Could not read session state: ${detail(error)}.`);
-  }
   const epochAtStart = initial.projectEpoch;
+  const selected = selectedTrackV1(payload, initial);
+  // "load X" is unambiguous producer language for a plug-in, so its selection guard runs
+  // first, before any catalog read (unchanged). For add/insert/put the CATALOG decides
+  // whether this is a plug-in ask at all, so the match is resolved before the guard:
+  // "add a counter phrase" with nothing selected must still fall through to the router,
+  // and only a claimed match with no selection earns the select-a-track guidance.
+  if (parsed.verb === "load" && !selected.ok) return selected.outcome;
 
   const observed = await observePluginsV1(environment);
   if (!observed.ok) return blocked(payload, "observation_failed", observed.reason);
@@ -397,7 +456,13 @@ export const loadNamedPluginV1: NativeSkillHandlerV1 = async ({ payload, environ
     return blocked(payload, "stale_context", "The project changed while I was finding that plug-in — try again.");
   }
 
-  const match = resolvePluginMatch(observed.value, query);
+  // Under add/insert/put a common part word ("harmony", "hook", "fill", …) may only claim
+  // an exact or prefix match — never the substring rank, which with a real catalog would
+  // hand "add a harmony" to Waves Harmony Mono. "load X" keeps the full ranking.
+  const candidates = parsed.verb !== "load" && isPartWordQueryV1(query)
+    ? exactOrPrefixEntriesV1(observed.value, query)
+    : observed.value;
+  const match = resolvePluginMatch(candidates, query);
   if (match.kind === "none") {
     // Step-1 brief, slice 2: "add/insert/put <X>" with nothing in the catalog called X
     // is most likely not a plug-in ask at all ("add a counter phrase"). Answer with the
@@ -407,12 +472,23 @@ export const loadNamedPluginV1: NativeSkillHandlerV1 = async ({ payload, environ
     if (parsed.verb !== "load") return { kind: "unsupported", code: "no_match", say: "I can't do that reliably yet." };
     return blocked(payload, "missing_target", `I couldn't find ${query} — open Plug-in Manager or rescan, then try again.`);
   }
+  // The catalog claimed the ask: from here a target is required, and a choice is never
+  // issued without one (its continuation binds to the track).
+  if (!selected.ok) return selected.outcome;
   if (match.kind === "ambiguous") {
     const choices = pluginChoicesV1(match.entries);
-    return issueChoiceV1(payload, environment, choices, track.id);
+    return issueChoiceV1(payload, environment, choices, selected.track.id);
   }
 
+  // `before` is read once the load is actually going ahead — the same point the
+  // continuation-resume path above takes it (after the catalog read).
+  let before: Snapshot;
+  try {
+    before = await environment.snapshot();
+  } catch (error) {
+    return blocked(payload, "observation_failed", `Could not read session state: ${detail(error)}.`);
+  }
   const sourceAtStart = await readSourceStatusSnapshotV1(environment);
   if (!sourceAtStart) return blocked(payload, "observation_failed", "Could not verify source status.");
-  return runAtomicLoadV1(payload, environment, before, track.id, match.entry, epochAtStart, sourceAtStart);
+  return runAtomicLoadV1(payload, environment, before, selected.track.id, match.entry, epochAtStart, sourceAtStart);
 };
