@@ -926,6 +926,7 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
                 auto sessVar = o->getProperty ("session");   // bind: the var temporary would die
                 if (auto* sess = sessVar.getDynamicObject())
                 {
+                    sess->removeProperty ("revision");    // step-1 slice 6: monotonic, advances on every jump
                     sess->removeProperty ("metronome");
                     // …and `click`, which CAP-TRN-005 added as the full click block. It
                     // carries `enabled` off the SAME te::Edit::clickTrackEnabled flag that
@@ -15502,6 +15503,7 @@ int runSelfTest (MoshEngine& eng, MoshOps& ops)
                     sess->removeProperty ("recentProjects");
                     sess->removeProperty ("recoveryAvailable");
                     sess->removeProperty ("recoverableCount");
+                    sess->removeProperty ("revision");   // step-1 slice 6: monotonic, advances on undo too
                 }
             }
             // An AUTOMATED parameter's live `value` is DERIVED, not persisted: it is the

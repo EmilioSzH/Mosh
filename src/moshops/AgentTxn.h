@@ -105,6 +105,10 @@ inline const juce::StringArray& volatilePaths()
         // Where the project lives is not what the project IS (and it is a home path).
         "session.editFile",
         "session.projectExtension",
+        // step-1 slice 6 — a monotonic per-process mutation counter (bumped by every
+        // transaction, undo and redo) that the agent loop uses to detect a changed session.
+        // A rollback restores CONTENT and still advances it, so it is not part of the identity.
+        "session.revision",
     };
     return paths;
 }
