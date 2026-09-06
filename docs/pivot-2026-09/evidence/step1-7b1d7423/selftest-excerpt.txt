@@ -1,0 +1,16 @@
+# --selftest excerpt (repaired candidate 7b1d7423, Release binary 2026-09-05 23:17)
+  ok   set_send_level refuses a non-finite db
+  ok   a refused non-finite set_send_level mutates nothing (canonical snapshot equal)
+  ok   set_send_level ONE undo restores the canonical snapshot
+  ok   set_send_mute ONE undo restores the canonical snapshot
+  ok   set_send_pan ONE undo restores the canonical snapshot
+  ok   matrix: save/reload round-trips EVERY mutated field (canonical snapshot equal)
+...
+===== 3537/3537 checks passed, 0 failed =====
+
+Cleaning up temp files..
+
+# --selftest-undo
+  ..   section "focused undo transaction coverage" completed in 0.003s (18 checks, 0 failed)
+===== 18/18 focused undo checks passed, 0 failed =====
+Cleaning up temp files..
