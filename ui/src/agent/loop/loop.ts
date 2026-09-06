@@ -44,7 +44,14 @@ export type LoopProgressEvent =
   | { kind: "phase"; phase: "planning" | "stepping" | "repairing" | "finalizing" }
   | { kind: "plan"; plan: readonly PlanStep[]; say?: string }
   | { kind: "step-start"; index: number; goal?: string; commands: readonly AgentCommandCall[] }
-  | { kind: "step-result"; index: number; results: StepRecord["results"] };
+  | { kind: "step-result"; index: number; results: StepRecord["results"] }
+  /** Commands the loop did NOT submit — the planner's top-level copy of commands the
+   *  plan already carries, or a repair's re-send of commands that already succeeded
+   *  in the step it repairs. `index` is the step slot the skip belongs to (the same
+   *  numbering as step-start); `note` is the wording that also lands on a transcript
+   *  record's `say` — that step's, or the repaired step's when the skip leaves
+   *  nothing to run. Never emitted for steps the model authored as repeats. */
+  | { kind: "skip"; index: number; commands: readonly AgentCommandCall[]; note: string };
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -81,13 +88,25 @@ const countInvalid = (calls: readonly AgentCommandCall[]): number =>
  *  exists, so acting on it would edit the wrong values. */
 export const SESSION_CHANGED_SAY = "the session changed while I was working — ask again";
 
-/** Key-order-independent JSON identity for a command list — the "exactly once"
- *  comparisons below must not be fooled by `{a,b}` vs `{b,a}` from the same model. */
-const canonCommands = (calls: readonly AgentCommandCall[] | undefined): string =>
-  JSON.stringify(calls ?? [], (_key, value: unknown) =>
+/** Key-order-independent JSON identity for ONE command — the "exactly once"
+ *  comparisons below must not be fooled by `{a,b}` vs `{b,a}` from the same model.
+ *  `args` defaults to `{}` so a hand-built `{command}` equals the parser's shape. */
+const canonCommand = (c: AgentCommandCall): string =>
+  JSON.stringify({ command: c.command, args: c.args ?? {} }, (_key, value: unknown) =>
     value !== null && typeof value === "object" && !Array.isArray(value)
       ? Object.fromEntries(Object.keys(value as Record<string, unknown>).sort().map((k) => [k, (value as Record<string, unknown>)[k]]))
       : value);
+
+/** Splits `calls` into [not in `known`, in `known`] by canonical identity, order kept. */
+const partitionByIdentity = (
+  calls: readonly AgentCommandCall[], known: ReadonlySet<string>,
+): [AgentCommandCall[], AgentCommandCall[]] => {
+  const kept: AgentCommandCall[] = [], matched: AgentCommandCall[] = [];
+  for (const c of calls) (known.has(canonCommand(c)) ? matched : kept).push(c);
+  return [kept, matched];
+};
+
+const commandNames = (calls: readonly AgentCommandCall[]): string => calls.map((c) => c.command).join(", ");
 
 /** `session.revision` — the engine's per-process mutation counter (MoshOps
  *  editRevision_: bumped by every mutating command and by undo/redo), exposed by
@@ -104,6 +123,18 @@ export async function runAgentLoop(task: { ask: string }, deps: LoopDeps): Promi
   const t0 = now();
   const progress = (e: LoopProgressEvent) => deps.onProgress?.(e);
   const aborted = () => deps.signal?.aborted === true;
+
+  // A dropped/skipped command is never silent: a `skip` progress event fires at the
+  // decision, and the wording rides on the `say` of the transcript record it belongs
+  // to (the next executed step — or, when nothing is left to run, the step being
+  // repaired). No zero-command records: those would shift step indices/budgets and
+  // hide a failed last step from acceptability's last-step check.
+  const pendingNotes: string[] = [];
+  const skip = (index: number, commands: readonly AgentCommandCall[], note: string) => {
+    progress({ kind: "skip", index, commands, note });
+    pendingNotes.push(note);
+  };
+  const takeNotes = (): string | undefined => (pendingNotes.length ? pendingNotes.splice(0).join("; ") : undefined);
 
   const transcript: StepRecord[] = [];
   let snap: Snapshot = await deps.env.getSnapshot();
@@ -154,13 +185,17 @@ export async function runAgentLoop(task: { ask: string }, deps: LoopDeps): Promi
       if (first.commands?.length) {
         // Exactly once (step-1 slice 3, R3): a reply that carries its commands BOTH
         // at the top level and on the plan used to run them twice — as this "start"
-        // step and again as plan step 1 (live log: A,B,A,B in one transaction, two
-        // batches ~20 ms apart, one model reply). The top-level copy is dropped when
-        // it is JSON-identical to plan[0]'s commands or to the whole plan flattened.
-        const top = canonCommands(first.commands);
-        const alreadyPlanned = hadPlanArray
-          && (top === canonCommands(plan[0]!.commands) || top === canonCommands(plan.flatMap((p) => p.commands ?? [])));
-        if (!alreadyPlanned) plan.unshift({ goal: "start", commands: first.commands });
+        // step and again as the plan step that already carried them (live log:
+        // A,B,A,B in one transaction, two batches ~20 ms apart, one model reply).
+        // Only the planner's copy is deduped, and only here at plan build: every
+        // top-level command JSON-equal (key-order independent) to a command in ANY
+        // plan step is dropped; whatever remains is still the "start" step. Steps
+        // the model AUTHORED are never touched — "duplicate it twice" is two steps,
+        // undo/undo is two undos.
+        const planned = new Set(plan.flatMap((p) => p.commands ?? []).map(canonCommand));
+        const [start, dropped] = partitionByIdentity(first.commands, planned);
+        if (dropped.length) skip(0, dropped, `skipped ${dropped.length} top-level command(s) the plan already carries: ${commandNames(dropped)}`);
+        if (start.length) plan.unshift({ goal: "start", commands: start });
       }
       if (plan.length) {
         // A real plan array = plan mode (exhaustion ⇒ done). BARE commands keep
@@ -194,7 +229,26 @@ export async function runAgentLoop(task: { ask: string }, deps: LoopDeps): Promi
       say = r.say ?? say;
       if (r.status === "need_user") { outcome = "need_user"; break; }
       if (!r.commands?.length) { outcome = r.status === "done" ? "done" : "error"; break; }
-      commands = r.commands;
+      // A repair twin of a PARTIALLY failed step re-sends the commands that already
+      // landed alongside the fix. Skip only those — commands that succeeded in the
+      // step being repaired (the immediately preceding record: repair mode is armed
+      // right after it is pushed) — and say so. Anything that failed there, or is
+      // new, runs.
+      const repaired = transcript[transcript.length - 1]!;
+      const applied = new Set(repaired.commands.filter((_, i) => repaired.results[i]?.ok === true).map(canonCommand));
+      const [remaining, alreadyApplied] = partitionByIdentity(r.commands, applied);
+      if (alreadyApplied.length) {
+        skip(transcript.length, alreadyApplied,
+          `skipped ${alreadyApplied.length} already-applied command(s) from step ${transcript.length}: ${commandNames(alreadyApplied)}`);
+        if (!remaining.length) {
+          // Nothing left to run: the note attaches to the step it repairs, and the
+          // reply counts as an empty repair — its status decides, as above.
+          transcript[transcript.length - 1] = { ...repaired, say: [repaired.say, takeNotes()].filter(Boolean).join("; ") };
+          outcome = r.status === "done" ? "done" : "error";
+          break;
+        }
+      }
+      commands = remaining;
       goal = "repair";
       doneAfterStep = r.status === "done";
       repairMode = false;
@@ -245,16 +299,6 @@ export async function runAgentLoop(task: { ask: string }, deps: LoopDeps): Promi
       break;
     }
 
-    // ── exactly once: a step JSON-identical to the previous ALL-OK step is not
-    // re-run (an absolute edit would be a no-op, an additive one — add_note — would
-    // land twice). A twin of a FAILED step is a legitimate repair and still runs.
-    const prev = transcript[transcript.length - 1];
-    if (prev && prev.results.every((r) => r.ok) && canonCommands(prev.commands) === canonCommands(commands)) {
-      if (doneAfterStep) { outcome = "done"; break; }
-      if (planIdx >= plan.length && lastStatus === "plan") { outcome = "done"; break; }
-      continue;
-    }
-
     // ── revision binding: the session this step was planned against must still be
     // the one we would edit. A GUI edit (or anything outside this task) between the
     // last observation and now moves `session.revision`; park rather than act on
@@ -271,7 +315,9 @@ export async function runAgentLoop(task: { ask: string }, deps: LoopDeps): Promi
     const { results, snapshot } = await deps.env.runBatch(`moshi task: ${task.ask.slice(0, 48)}`, commands);
     snap = snapshot;
     lastRevision = revisionOf(snapshot);   // our own batch bumped it — that is the new baseline, not drift
-    transcript.push({ say: undefined, intent: undefined, commands, results, invalidCount: countInvalid(commands), ms: lastMs });
+    // `say` on a loop record is the loop's own note (skips), never the model's — the
+    // model's say is surfaced through the run, not per step.
+    transcript.push({ say: takeNotes(), intent: undefined, commands, results, invalidCount: countInvalid(commands), ms: lastMs });
     progress({ kind: "step-result", index, results });
 
     if (results.some((r) => !r.ok)) {

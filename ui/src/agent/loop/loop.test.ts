@@ -256,8 +256,26 @@ describe("runAgentLoop — exactly once (step-1 slice 3)", () => {
   // model reply — the reply carried the same commands at the top level AND on
   // plan[0], and the plan build ran the top-level copy as a "start" step ahead of
   // the plan step that already carried them.
+  //
+  // The rule is deliberately NARROW (verifier round on 4fdf12fc): only the
+  // planner's top-level copy is deduped against the plan, at plan build. Steps the
+  // model AUTHORED as repeats ("duplicate it twice", undo/undo) execute as written;
+  // a repair that re-sends a command which already succeeded in the failed step
+  // skips just that command. Every dropped/skipped command is visible: a note on
+  // the transcript step it rides with and a `skip` progress event.
   const A = CMD("transform_notes", { clipId: "9", op: "transpose", semitones: 2 });
   const B = CMD("set_drum_pad", { trackId: "3", pad: 0, sample: "kick.wav" });
+  const C = CMD("set_tempo", { bpm: 90 });
+
+  /** Captures every progress event, returning the `skip` ones for assertions. */
+  function progressSpy() {
+    const events: Array<{ kind: string } & Record<string, unknown>> = [];
+    return {
+      events,
+      onProgress: (e: { kind: string }) => { events.push(e as { kind: string } & Record<string, unknown>); },
+      skips: () => events.filter((e) => e.kind === "skip"),
+    };
+  }
 
   it("a reply carrying the same commands at top level AND on plan[0] executes ONE batch", async () => {
     const { chat } = scriptedChat([
@@ -286,33 +304,84 @@ describe("runAgentLoop — exactly once (step-1 slice 3)", () => {
     expect(run.outcome).toBe("done");
   });
 
-  it("a plan step JSON-identical to the previous all-ok step is skipped (additive commands included)", async () => {
-    const note = CMD("add_note", { clipId: "101", pitch: 69, start: 0, length: 0.5, velocity: 88 });
+  it("a top-level copy that only PARTLY overlaps plan[0] runs the remainder as the start step — each command once, the drop visible", async () => {
+    const spy = progressSpy();
+    const { chat } = scriptedChat([
+      { status: "continue", commands: [A, B, C], plan: [{ goal: "notes and kick", commands: [A, B] }] },
+    ]);
+    const { env, batches } = scriptedEnv(["ok", "ok", "ok"]);
+    const run = await runAgentLoop({ ask: "x" }, { chat, env, onProgress: spy.onProgress } as LoopDeps);
+
+    expect(batches.map((b) => b.commands)).toEqual([["set_tempo"], ["transform_notes", "set_drum_pad"]]);
+    expect(run.stepCount).toBe(2);
+    expect(run.outcome).toBe("done");
+    // the two dropped commands are visible: a transcript note on the step they ride with…
+    expect(run.transcript[0]!.say).toMatch(/skipped 2 .*transform_notes, set_drum_pad/);
+    // …and a skip progress event naming them
+    expect(spy.skips()).toHaveLength(1);
+    expect(spy.skips()[0]).toMatchObject({ kind: "skip", index: 0, commands: [A, B] });
+  });
+
+  it("an ORDER-SWAPPED top-level copy (list order and arg key order) is still the plan's copy — one batch", async () => {
+    const spy = progressSpy();
+    const Aswapped = CMD("transform_notes", { semitones: 2, op: "transpose", clipId: "9" });   // same call, keys reordered
+    const { chat } = scriptedChat([
+      { status: "continue", commands: [B, Aswapped], plan: [{ goal: "do both", commands: [A, B] }] },
+    ]);
+    const { env, batches } = scriptedEnv(["ok", "ok"]);
+    const run = await runAgentLoop({ ask: "x" }, { chat, env, onProgress: spy.onProgress } as LoopDeps);
+
+    expect(batches.map((b) => b.commands)).toEqual([["transform_notes", "set_drum_pad"]]);
+    expect(run.stepCount).toBe(1);
+    expect(run.outcome).toBe("done");
+    expect(run.transcript[0]!.say).toMatch(/skipped 2 /);
+    expect(spy.skips()[0]).toMatchObject({ kind: "skip", commands: [B, Aswapped] });
+  });
+
+  it("two AUTHORED duplicate_clip steps both execute ('duplicate it twice') — nothing skipped, nothing noted", async () => {
+    const spy = progressSpy();
+    const dup = CMD("duplicate_clip", { clipId: "9" });
     const { chat } = scriptedChat([
       { status: "continue", plan: [
-        { goal: "a", commands: [note] },
-        { goal: "a again", commands: [note] },               // identical ⇒ skipped
+        { goal: "copy 1", commands: [dup] },
+        { goal: "copy 2", commands: [dup] },               // authored repeat ⇒ executes
         { goal: "b", commands: [CMD("set_track_mute", { trackId: "1", mute: true })] },
       ] },
     ]);
     const { env, batches } = scriptedEnv(["ok", "ok", "ok"]);
-    const run = await runAgentLoop({ ask: "x" }, { chat, env } as LoopDeps);
+    const run = await runAgentLoop({ ask: "duplicate it twice" }, { chat, env, onProgress: spy.onProgress } as LoopDeps);
 
-    expect(batches.map((b) => b.commands)).toEqual([["add_note"], ["set_track_mute"]]);
-    expect(run.stepCount).toBe(2);
+    expect(batches.map((b) => b.commands)).toEqual([["duplicate_clip"], ["duplicate_clip"], ["set_track_mute"]]);
+    expect(run.stepCount).toBe(3);
     expect(run.outcome).toBe("done");
+    expect(spy.skips()).toEqual([]);
+    expect(run.transcript.every((s) => s.say === undefined)).toBe(true);
   });
 
-  it("a plan whose LAST step duplicates the previous all-ok step still finishes done", async () => {
+  it("undo, undo — two authored identical steps at the END of a plan both execute and finish done", async () => {
     const { chat } = scriptedChat([
       { status: "continue", plan: [
-        { goal: "a", commands: [CMD("set_tempo", { bpm: 90 })] },
-        { goal: "a again", commands: [CMD("set_tempo", { bpm: 90 })] },
+        { goal: "back one", commands: [CMD("undo")] },
+        { goal: "back two", commands: [CMD("undo")] },
       ] },
     ]);
     const { env, batches } = scriptedEnv(["ok", "ok"]);
+    const run = await runAgentLoop({ ask: "undo the last two" }, { chat, env } as LoopDeps);
+    expect(batches.map((b) => b.commands)).toEqual([["undo"], ["undo"]]);
+    expect(run.outcome).toBe("done");
+  });
+
+  it("bare-commands continue mode: a model repeating its commands executes them again (authored) instead of being re-asked until the budget dies", async () => {
+    const { chat, seen } = scriptedChat([
+      { status: "continue", commands: [C] },
+      { status: "continue", commands: [C] },              // repeated verbatim ⇒ executes
+      { status: "done", commands: [] },
+    ]);
+    const { env, batches } = scriptedEnv(["ok", "ok"]);
     const run = await runAgentLoop({ ask: "x" }, { chat, env } as LoopDeps);
-    expect(batches).toHaveLength(1);
+
+    expect(batches.map((b) => b.commands)).toEqual([["set_tempo"], ["set_tempo"]]);
+    expect(seen).toHaveLength(3);
     expect(run.outcome).toBe("done");
   });
 
@@ -328,6 +397,53 @@ describe("runAgentLoop — exactly once (step-1 slice 3)", () => {
     const run = await runAgentLoop({ ask: "x" }, { chat, env } as LoopDeps);
     expect(batches).toHaveLength(2);
     expect(run.outcome).toBe("done");
+  });
+
+  it("a repair twin of a PARTIALLY failed step re-runs only what did not succeed, and says so", async () => {
+    const spy = progressSpy();
+    const W = CMD("set_clip_warp", { clipId: "9", autoTempo: true });
+    const S = CMD("stretch_clip", { clipId: "9", bars: 4 });
+    const { chat } = scriptedChat([
+      { status: "continue", plan: [{ goal: "tempo and warp", commands: [C, W] }] },
+      { status: "done", say: "fixed", commands: [C, S] },   // the twin re-sends C, which already landed
+    ]);
+    const { env, batches } = scriptedEnv([
+      [{ command: "set_tempo", ok: true }, { command: "set_clip_warp", ok: false, error: "not an audio clip" }],
+      "ok",
+    ]);
+    const run = await runAgentLoop({ ask: "warp it" }, { chat, env, onProgress: spy.onProgress } as LoopDeps);
+
+    expect(batches.map((b) => b.commands)).toEqual([["set_tempo", "set_clip_warp"], ["stretch_clip"]]);
+    expect(run.outcome).toBe("done");
+    expect(run.stepCount).toBe(2);
+    // the repair step's record holds only what was submitted (aligned with its results) plus the note
+    expect(run.transcript[1]!.commands).toEqual([S]);
+    expect(run.transcript[1]!.results).toEqual([{ command: "stretch_clip", ok: true }]);
+    expect(run.transcript[1]!.say).toMatch(/skipped 1 .*set_tempo/);
+    expect(spy.skips()).toHaveLength(1);
+    expect(spy.skips()[0]).toMatchObject({ kind: "skip", index: 1, commands: [C] });
+  });
+
+  it("a repair that re-sends ONLY already-applied commands runs nothing, ends by its status, and the skip stays visible", async () => {
+    const spy = progressSpy();
+    const W = CMD("set_clip_warp", { clipId: "9", autoTempo: true });
+    const { chat, seen } = scriptedChat([
+      { status: "continue", plan: [{ goal: "tempo and warp", commands: [C, W] }] },
+      { status: "continue", commands: [C] },                 // nothing new: C landed, W was dropped without a fix
+    ]);
+    const { env, batches } = scriptedEnv([
+      [{ command: "set_tempo", ok: true }, { command: "set_clip_warp", ok: false, error: "not an audio clip" }],
+      "ok",
+    ]);
+    const run = await runAgentLoop({ ask: "warp it" }, { chat, env, onProgress: spy.onProgress } as LoopDeps);
+
+    expect(batches).toHaveLength(1);                         // no second batch, no re-ask loop
+    expect(seen).toHaveLength(2);
+    expect(run.outcome).toBe("error");                       // same rule as an empty repair reply
+    expect(run.stepCount).toBe(1);
+    expect(run.transcript[0]!.results.map((r) => r.ok)).toEqual([true, false]);   // the failure is not masked
+    expect(run.transcript[0]!.say).toMatch(/skipped 1 .*set_tempo/);
+    expect(spy.skips()[0]).toMatchObject({ kind: "skip", index: 1, commands: [C] });
   });
 });
 
