@@ -5,7 +5,7 @@ import { matchFastPath } from "../agent/fastPath";
 import { handleFast } from "../agent/performer";
 import { writePreference } from "../agent/memory/writePreference";
 import { resolveSectionRework, planSectionRework } from "../agent/sectionScope";
-import { createVoiceInput, isVoiceSupported, type VoiceInput } from "../agent/voiceInput";
+import { createDockVoice, type DockVoice } from "./dockVoice";
 import { runStudioSkillV1, clearDefaultStudioSkillContinuationsV1 } from "../agent/skillFoundry/runtime";
 import type { SkillChoiceV1, SkillOutcomeV1, StudioSkillEnvironmentV1 } from "../agent/skillFoundry/contracts";
 import { readSkillSourceStatusV1 } from "../agent/skillFoundry/nativeReads";
@@ -37,12 +37,11 @@ export function MoshiDock() {
   const [listening, setListening] = useState(false);
   const [choices, setChoices] = useState<readonly SkillChoiceV1[]>([]);
   const [brainRuntime, setBrainRuntime] = useState<BrainRuntimeStatus | null>(null);
-  const runRef = useRef<(text: string, source: "typed" | "push_to_talk" | "always_on") => void>(() => {});
+  const runRef = useRef<(text: string, source: "typed" | "push_to_talk") => void>(() => {});
   const pendingSkillToken = useRef<string | null>(null);
-  const voiceRef = useRef<VoiceInput | null | undefined>(undefined);
+  const voiceRef = useRef<DockVoice | null>(null);
   const holdTimer = useRef<number | undefined>(undefined);
   const pttRef = useRef(false);
-  const voiceSupported = isVoiceSupported();
 
   useEffect(() => {
     void brainRuntimeStatus().then(setBrainRuntime).catch(() => setBrainRuntime({ state: "unavailable" }));
@@ -117,7 +116,7 @@ export function MoshiDock() {
     return false;
   };
 
-  const run = async (text: string, source: "typed" | "push_to_talk" | "always_on" = "typed") => {
+  const run = async (text: string, source: "typed" | "push_to_talk" = "typed") => {
     if (!text || useStore.getState().agentBusy || recordingDisablesDock(useStore.getState().transport.recording)) return;
     setInput(""); setSay(null); setChoices([]); setAgentBusy(true);
     try {
@@ -202,9 +201,9 @@ export function MoshiDock() {
   };
   runRef.current = (text, source) => { void run(text, source); };
 
-  const ensureVoice = (): VoiceInput | null => {
-    if (voiceRef.current === undefined) {
-      voiceRef.current = createVoiceInput({
+  const ensureVoice = (): DockVoice => {
+    if (!voiceRef.current) {
+      voiceRef.current = createDockVoice({
         onStart: () => { setListening(true); setAgentListening(true); setInput(""); },
         onInterim: (t) => setInput(t),
         onStop: () => { setListening(false); setAgentListening(false); },
@@ -216,10 +215,9 @@ export function MoshiDock() {
   };
 
   const startVoice = () => {
-    if (safe || agentBusy || !voiceSupported) return;
+    if (safe || agentBusy) return;
     if (useStore.getState().currentMode() === "recording") return;
-    const v = ensureVoice();
-    v?.start();
+    void ensureVoice().start();
   };
 
   const disabled = safe || agentBusy;
@@ -265,10 +263,10 @@ export function MoshiDock() {
           type="button"
           className={`ibtn${listening ? " on" : ""}`}
           data-testid="v3-moshi-mic"
-          disabled={disabled || !voiceSupported}
+          disabled={disabled}
           aria-label={listening ? "Listening" : "Dictate or hold to talk"}
           onPointerDown={(e) => {
-            if (disabled || !voiceSupported) return;
+            if (disabled) return;
             holdTimer.current = window.setTimeout(() => {
               pttRef.current = true;
               startVoice();
