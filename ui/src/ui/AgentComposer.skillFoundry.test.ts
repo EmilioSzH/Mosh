@@ -72,6 +72,7 @@ vi.mock("../agent/loop/runTask", async (importOriginal) => {
 });
 
 import { AgentComposer } from "./AgentComposer";
+import { clearExplicitBalanceContinuationsV1 } from "../agent/skillFoundry/native/explicitBalance";
 
 type FakePlugin = { id: string; name: string; format: string; manufacturer: string; isInstrument: boolean };
 type FakeTxn = {
@@ -214,6 +215,9 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
     Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
     runtimeSpy.reset();
     loopControls.reset();
+    // Step-1 slice 5 — "another N dB" binds to the last completed move in module memory;
+    // forget it between tests so a repeat never leaks across cases.
+    clearExplicitBalanceContinuationsV1();
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -428,23 +432,25 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
   // with no send, the Reverb return). The loop gate is OPEN in every case so the assertion
   // "the loop was never consulted" is about precedence, not the gate: the studio-skill
   // runtime claims each ask deterministically and the turn ends there.
+  // Shared by the two audit-derived describes below.
+  const MARKERS = new Set(["batch_begin", "batch_status", "batch_end", "batch_rollback", "list_plugins"]);
+  const mutations = () => exec.mock.calls.filter(([command]) => !MARKERS.has(command)).map(([command, args]) => [command, args]);
+  const vocal = () => engine.tracks.find((t) => t.id === "v")!;
+  const drums = () => engine.tracks.find((t) => t.id === "d")!;
+
+  const loadAuditFixture = (extra: Track[] = []) => {
+    loopControls.allowed = true;
+    engine.tracks = [
+      { id: "v", index: 0, name: "Vocal", type: "audio", clips: [], volumeDb: -10, sends: [{ bus: 0, db: -12, mute: false }] },
+      { id: "d", index: 1, name: "Drums", type: "audio", clips: [], volumeDb: 0 },
+      { id: "r", index: 2, name: "Reverb", type: "return", clips: [], isReturn: true, returnBus: 0 },
+      ...extra,
+    ];
+    engine.buses = [{ bus: 0, name: "Reverb", trackId: "r" }];
+    act(() => { useStore.setState({ snapshot: engine.snapshot(), selectedTrackId: null }); });
+  };
+
   describe("deterministic balance lane — audit-derived cases (step-1 slice 5)", () => {
-    const MARKERS = new Set(["batch_begin", "batch_status", "batch_end", "batch_rollback", "list_plugins"]);
-    const mutations = () => exec.mock.calls.filter(([command]) => !MARKERS.has(command)).map(([command, args]) => [command, args]);
-    const vocal = () => engine.tracks.find((t) => t.id === "v")!;
-
-    const loadAuditFixture = (extra: Track[] = []) => {
-      loopControls.allowed = true;
-      engine.tracks = [
-        { id: "v", index: 0, name: "Vocal", type: "audio", clips: [], volumeDb: -10, sends: [{ bus: 0, db: -12, mute: false }] },
-        { id: "d", index: 1, name: "Drums", type: "audio", clips: [], volumeDb: 0 },
-        { id: "r", index: 2, name: "Reverb", type: "return", clips: [], isReturn: true, returnBus: 0 },
-        ...extra,
-      ];
-      engine.buses = [{ bus: 0, name: "Reverb", trackId: "r" }];
-      act(() => { useStore.setState({ snapshot: engine.snapshot(), selectedTrackId: null }); });
-    };
-
     it("S5: 'set the vocal to -13 dB' is served by the studio skill — one set_track_volume, the loop never consulted", async () => {
       loadAuditFixture();
       await send("set the vocal to -13 dB");
@@ -493,6 +499,94 @@ describe("AgentComposer — Skill Foundry consolidated routing (Task 7)", () => 
       expect(exec.mock.calls.map(([command]) => command)).not.toContain("add_send");
       expect(say()).toBe("Drums has no send to Reverb — add one first");
       expect(engine.tracks.find((t) => t.id === "d")?.sends).toBeUndefined();
+    });
+  });
+
+  // Step-1 repair — the audit's supported requests the LLM loop served on a single
+  // non-deterministic run (S1–S4, S9, S10), now pinned as deterministic through the real
+  // composer with the loop gate OPEN: exactly one command each, the value computed from the
+  // snapshot, and the loop never consulted; plus F2, the first-ask "another 3 dB" refusal.
+  // S11 (a compound "then" ask) and S12 (a taste sentence) are not deterministic-lane asks
+  // and deliberately keep reaching the router/loop.
+  describe("deterministic balance lane — audit S1–S4, S9, S10, F2 through the composer (step-1 slice 5)", () => {
+    it("S1: 'lower the vocal 3 dB' → one set_track_volume {Vocal, -13}, spoken as a before → after", async () => {
+      loadAuditFixture();
+      await send("lower the vocal 3 dB");
+      expect(runtimeSpy.calls).toEqual([{ utterance: "lower the vocal 3 dB", token: undefined }]);
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([["set_track_volume", { trackId: "v", db: -13 }]]);
+      expect(vocal().volumeDb).toBe(-13);
+      expect(say()).toBe("Vocal −10 → −13 dB");
+    });
+
+    it("S2: 'turn the drums down 2 dB' → one set_track_volume {Drums, before − 2}", async () => {
+      loadAuditFixture();
+      await send("turn the drums down 2 dB");
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([["set_track_volume", { trackId: "d", db: -2 }]]);
+      expect(drums().volumeDb).toBe(-2);
+      expect(say()).toBe("Drums 0 → −2 dB");
+    });
+
+    it("S3: 'another 3 dB' right after S1 → one more set_track_volume {Vocal, -16}; two commands over the two turns", async () => {
+      loadAuditFixture();
+      await send("lower the vocal 3 dB");
+      await send("another 3 dB");
+      expect(runtimeSpy.calls.map((c) => c.utterance)).toEqual(["lower the vocal 3 dB", "another 3 dB"]);
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([
+        ["set_track_volume", { trackId: "v", db: -13 }],
+        ["set_track_volume", { trackId: "v", db: -16 }],
+      ]);
+      expect(vocal().volumeDb).toBe(-16);
+      expect(say()).toBe("Vocal −13 → −16 dB");
+    });
+
+    it("S4: 'raise the drums 2 dB' → one set_track_volume {Drums, before + 2}", async () => {
+      loadAuditFixture();
+      await send("raise the drums 2 dB");
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([["set_track_volume", { trackId: "d", db: 2 }]]);
+      expect(drums().volumeDb).toBe(2);
+      expect(say()).toBe("Drums 0 → 2 dB");
+    });
+
+    it("S9: 'more reverb on the vocal' → one set_send_level {Vocal, Reverb, before + 3}, the default spoken", async () => {
+      loadAuditFixture();
+      await send("more reverb on the vocal");
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([["set_send_level", { trackId: "v", bus: 0, db: -9 }]]);
+      expect(vocal().sends?.[0]?.db).toBe(-9);
+      expect(say()).toBe("Vocal → Reverb send −12 → −9 dB (+3 dB by default)");
+    });
+
+    it("S10: 'less reverb on the vocal by 6 dB' → one set_send_level {Vocal, Reverb, before − 6}", async () => {
+      loadAuditFixture();
+      await send("less reverb on the vocal by 6 dB");
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([["set_send_level", { trackId: "v", bus: 0, db: -18 }]]);
+      expect(vocal().sends?.[0]?.db).toBe(-18);
+      expect(vocal().volumeDb).toBe(-10);
+      expect(say()).toBe("Vocal → Reverb send −12 → −18 dB");
+    });
+
+    it("F2: 'another 3 dB' as the first ask is blocked, asks for the track, runs nothing, and never reaches the loop", async () => {
+      loadAuditFixture();
+      await send("another 3 dB");
+      expect(runtimeSpy.calls).toEqual([{ utterance: "another 3 dB", token: undefined }]);
+      expect(loopControls.calls).toEqual([]);
+      expect(mutations()).toEqual([]);
+      expect(say()).toBe("another what? name the track");
+      expect(vocal().volumeDb).toBe(-10);
+      expect(drums().volumeDb).toBe(0);
+    });
+
+    it("S11 and S12 are not deterministic-lane asks — they still fall through to the router/loop, with no skill command", async () => {
+      loadAuditFixture();
+      await send("drop the drums 3 dB then bring the vocal up 1 dB");
+      await send("the vocal is 3 dB too loud, fix it");
+      expect(mutations()).toEqual([]);
+      expect(loopControls.calls).toEqual(["drop the drums 3 dB then bring the vocal up 1 dB", "the vocal is 3 dB too loud, fix it"]);
     });
   });
 });
