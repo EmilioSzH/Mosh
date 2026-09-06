@@ -10,6 +10,7 @@ with [AUDIT-PROMPT-STEP1.md](AUDIT-PROMPT-STEP1.md).
 | Baseline SHA | code `0da6c638eaa719296e3c97650a405f1afc9e8f53`; the candidate branch `claude/step1-useful-edits` starts at the docs commit `e57c74d4` (code-identical) — scope diffs run against `e57c74d4` |
 | Candidate | one branch/worktree from the baseline; one contiguous commit range; candidate SHA frozen before audit; no merge or push by the implementer |
 | Repair policy | one bounded repair cycle after the independent audit, then a blocked verdict and narrowed scope |
+| **Outcome** | **Delivered and accepted 2026-09-06** at `1453a647`. Two audits: 10/12 then 12/12 supported, 3/8 then 6/8 safety. Carried items and the accepted gap: [STEP1-STATUS-2026-09-06.md](STEP1-STATUS-2026-09-06.md) |
 | Do not | replace the model or provider to fix routing; touch the produce prompts; add commands to the catalog; add a label store, dashboard or schema |
 
 ## 1. Goal

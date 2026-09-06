@@ -76,3 +76,18 @@ Options, in the order the auditor and I would rank them:
 
 I recommend option 1 plus filing the crash-banner defect as the first item of step 2, because it
 costs a user their whole session's agent capability after any crash and has a known mechanism.
+
+## Owner decision (2026-09-06)
+
+**Option 1.** Step 1 is accepted as delivered at `1453a647`, and the crash-banner defect becomes the
+first item of step 2. Consequences, recorded so nothing is quietly lost:
+
+- The candidate is accepted with **one acceptance criterion knowingly unmet**: an idempotent replay of
+  a committed envelope opens a second undo transaction. It is not fixed, not waived silently, and not
+  re-scored. It is carried as a step-2 item with its evidence in audit 2.
+- F6 stays unknown (not inducible through the companion or GUI surface) and F4 stays half exercised.
+  Neither is a pass; both are carried.
+- The one SIGSEGV in menu teardown stays unattributed. If it recurs, attribute it before releasing.
+- Merging to main is a separate decision and needs the native gate
+  (`scripts/auto-loop/gate.sh native <worktree> origin/main`). Nothing has been pushed or merged.
+
