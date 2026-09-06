@@ -46,13 +46,17 @@ const REVERB_BUS: Bus = { bus: 0, name: "Reverb", trackId: "reverb-return" };
 const DELAY_BUS: Bus = { bus: 1, name: "Delay", trackId: "delay-return" };
 const PLATE_BUS: Bus = { bus: 1, name: "Plate Verb", trackId: "plate-return" };
 
-function snapshotWith(tracks: Track[], buses: Bus[] = [REVERB_BUS]): Snapshot {
+const PROJECT_FILE = "/tmp/protools-reverb-macro.mosh";
+// A different project whose track and bus ids happen to coincide with PROJECT_FILE's.
+const OTHER_PROJECT_FILE = "/tmp/protools-reverb-macro-other.mosh";
+
+function snapshotWith(tracks: Track[], buses: Bus[] = [REVERB_BUS], editFile = PROJECT_FILE): Snapshot {
   return {
     schemaVersion: 1,
     session: {
       sampleRate: 48_000,
       tempo: 120,
-      editFile: "/tmp/protools-reverb-macro.mosh",
+      editFile,
       key: { tonic: "C", mode: "major" },
     },
     tracks,
@@ -60,7 +64,15 @@ function snapshotWith(tracks: Track[], buses: Bus[] = [REVERB_BUS]): Snapshot {
     transport: { playing: false, recording: false, position: 0, looping: false, loopStart: 0, loopEnd: 0 },
   };
 }
-const withSendDb = (db: number): Snapshot => snapshotWith([{ ...VOCAL, sends: [{ ...REVERB_SEND, db }] }, REVERB_RETURN]);
+const withSendDb = (db: number, editFile = PROJECT_FILE): Snapshot =>
+  snapshotWith([{ ...VOCAL, sends: [{ ...REVERB_SEND, db }] }, REVERB_RETURN], [REVERB_BUS], editFile);
+/** The same fixture from an older backend whose snapshot reports no session.editFile at all. */
+const withSendDbNoEditFile = (db: number): Snapshot => {
+  const snapshot = withSendDb(db);
+  const session: Partial<Snapshot["session"]> = { ...snapshot.session };
+  delete session.editFile;
+  return { ...snapshot, session: session as Snapshot["session"] };
+};
 
 const setValue = (input: HTMLInputElement, value: string) => {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -191,6 +203,44 @@ describe("Pro Tools lead-vocal reverb macro", () => {
     await act(async () => button.click());
 
     expect(sendLevelCalls()).toEqual([["set_send_level", { trackId: "vocal", bus: 0, db: -20 }]]);
+  });
+
+  it("re-captures the reset point when a different project file arrives under the same epoch and the same ids", async () => {
+    render();
+    // The user moved the send in this project…
+    act(() => useStore.setState({ snapshot: withSendDb(-20) }));
+    // …then a replacement the store did not initiate lands through a plain refresh (a
+    // reconnect/resync, a peer- or engine-initiated swap, an invalidation nobody flagged as
+    // projectReplaced): ANOTHER file whose track and bus ids coincide, reporting −15. The
+    // epoch has not moved — only the snapshot's own identity has.
+    act(() => useStore.setState({ snapshot: withSendDb(-15, OTHER_PROJECT_FILE) }));
+
+    // Nothing in the arriving project has moved yet, so its first readback IS its reset point;
+    // the previous project's −12 must not survive into it.
+    expect(reset()?.title).toBe("Return to -15.0 dB");
+    expect(reset()?.disabled).toBe(true);
+
+    act(() => useStore.setState({ snapshot: withSendDb(-9, OTHER_PROJECT_FILE) }));
+    expect(reset()?.disabled).toBe(false);
+    const button = reset();
+    if (!button) throw new Error("reset control is missing");
+    await act(async () => button.click());
+
+    expect(sendLevelCalls()).toEqual([["set_send_level", { trackId: "vocal", bus: 0, db: -15 }]]);
+  });
+
+  it("falls back to the epoch when the snapshot carries no editFile: the same epoch holds, a new epoch re-captures", () => {
+    useStore.setState({ snapshot: withSendDbNoEditFile(-12) });
+    render();
+    expect(reset()?.title).toBe("Return to -12.0 dB");
+
+    act(() => useStore.setState({ snapshot: withSendDbNoEditFile(-20) }));
+    expect(reset()?.title).toBe("Return to -12.0 dB");
+    expect(reset()?.disabled).toBe(false);
+
+    act(() => useStore.setState({ projectEpoch: 72, snapshot: withSendDbNoEditFile(-15) }));
+    expect(reset()?.title).toBe("Return to -15.0 dB");
+    expect(reset()?.disabled).toBe(true);
   });
 
   it("never latches the outgoing project's level as the reset point while the store is swapping projects", () => {

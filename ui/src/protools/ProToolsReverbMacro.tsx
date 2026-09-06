@@ -54,11 +54,34 @@ function readSendDb(trackId: string, bus: number, fallback: number): number {
 }
 
 // The level Reset returns to: the readback at the moment the binding FIRST resolved for this
-// (project epoch, track, bus). It is React state, so it lives exactly as long as this mount —
-// closing and reopening the drawer starts a fresh capture. That per-open limitation is
-// deliberate: a longer-lived reset point would need a store slice for pure view state, which
-// is more machinery than the one direct control in this step should carry.
-type ResetPoint = { readonly epoch: number; readonly key: string; readonly db: number };
+// (project, track, bus). "Project" is two things, and either one moving re-captures:
+//  - the store's projectEpoch, which moves when the STORE swaps projects (exec's
+//    open/new/reload/recover path, or an invalidation flagged projectReplaced);
+//  - the snapshot's own session.editFile, which moves when a different project arrives
+//    through a path the store did not notice — a plain refresh after a reconnect/resync, a
+//    peer- or engine-initiated swap, an invalidation nobody flagged. Keyed on the epoch
+//    alone, a reopened project whose track and bus ids coincide with the previous one's
+//    inherited the PREVIOUS project's reset point: an inverted Reset. An older backend that
+//    reports no editFile falls back to the epoch alone.
+// It is React state, so it lives exactly as long as this mount — closing and reopening the
+// drawer starts a fresh capture. That per-open limitation is deliberate: a longer-lived reset
+// point would need a store slice for pure view state, which is more machinery than the one
+// direct control in this step should carry.
+type ResetPoint = { readonly scope: string; readonly db: number };
+
+/** The snapshot's own project identity, or null when it reports none (an older backend). */
+function projectFileOf(snapshot: Snapshot): string | null {
+  const { editFile } = snapshot.session;
+  return typeof editFile === "string" ? editFile : null;
+}
+
+/**
+ * One string naming the (epoch, project file, track:bus) that a reset point — and the range's
+ * in-progress draft — belong to. Any part changing starts both over.
+ */
+function resetScope(epoch: number, projectFile: string | null, bindingKey: string): string {
+  return JSON.stringify([epoch, projectFile, bindingKey]);
+}
 
 export function ProToolsReverbMacro() {
   const snapshot = useStore((state) => state.snapshot);
@@ -85,11 +108,12 @@ export function ProToolsReverbMacro() {
 
   const { track, bus, db } = binding;
   const bindingKey = `${track.id}:${bus.bus}`;
+  // `snapshot` is non-null here — the binding resolved from it; the guard only narrows the type.
+  const scope = resetScope(projectEpoch, snapshot ? projectFileOf(snapshot) : null, bindingKey);
   // Adjust-state-during-render (the React-documented pattern for state derived from props):
-  // a new project epoch or a re-bound target re-captures; otherwise the first capture holds.
-  const resetPoint = captured && captured.epoch === projectEpoch && captured.key === bindingKey
-    ? captured
-    : { epoch: projectEpoch, key: bindingKey, db };
+  // a new scope — project epoch, project file or bound target — re-captures; otherwise the
+  // first capture holds.
+  const resetPoint = captured && captured.scope === scope ? captured : { scope, db };
   if (resetPoint !== captured) setCaptured(resetPoint);
 
   const isCurrentProject = (epoch: number) => useStore.getState().projectEpoch === epoch;
@@ -107,7 +131,7 @@ export function ProToolsReverbMacro() {
         Lead-vocal reverb → {track.name} → {bus.name} (bus {bus.bus})
       </div>
       <div className="pt-reverb-macro-row">
-        <ReconciledRange key={`${projectEpoch}:${bindingKey}`} min={-60} max={6} step={0.5} value={db}
+        <ReconciledRange key={scope} min={-60} max={6} step={0.5} value={db}
           data-testid="pt-reverb-macro-level" aria-label="Lead-vocal reverb send level"
           aria-describedby="pt-reverb-macro-label"
           onCommit={commit}
