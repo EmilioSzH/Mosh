@@ -562,6 +562,21 @@ export type StudioSkillEnvironmentV1 = {
   readonly recording: RecordingLifecycleEnvironmentV1;
   readonly newId?: () => string;
   readonly nowMs?: () => number;
+  /** Step-1 slice 6 — the turn this environment serves. The composer builds one environment
+   *  per `run(text)` with a fresh `turn_id`, the lane as `source`, and the verbatim ask as
+   *  `utterance`; every atomic skill transaction opened through this environment forwards it
+   *  into `batch_begin`'s args (atomicPlan.ts), so the engine stamps `turn_id` on every
+   *  in-batch JSONL line. Optional and additive: absent ⇒ batch_begin args are byte-identical
+   *  to before, and a key whose value is empty is omitted rather than sent as "". */
+  readonly provenance?: StudioSkillProvenanceV1;
+};
+
+/** Step-1 slice 6 — one turn's provenance, as the engine logs it inside `batch_begin`'s args
+ *  (the same three keys `logAgentTurn`'s marker carries; see executor.ts `turnMarkerArgs`). */
+export type StudioSkillProvenanceV1 = {
+  readonly turn_id?: string;
+  readonly source?: string;
+  readonly utterance?: string;
 };
 
 // DESIGN DECISION: not given an exact shape. `NativeSkillHandlerV1` is the function type

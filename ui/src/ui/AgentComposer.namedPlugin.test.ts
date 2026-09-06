@@ -368,7 +368,9 @@ describe("AgentComposer named plug-in skill", () => {
       await send("add OTT");
 
       expect(loopControls.calls).toEqual([]);
-      expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "ott" }, expect.any(Object));
+      // Step-1 slice 6 — the skill environment's exec names its lane on the envelope (the
+      // fourth argument), exactly as the sibling assertions above already pin.
+      expect(exec).toHaveBeenCalledWith("load_plugin", { trackId: "synth", pluginId: "ott" }, expect.any(Object), "studio_skill");
       expect(exec.mock.calls.filter(([command]) => command === "load_plugin")).toHaveLength(1);
       expect(host.querySelector("[role=status]")?.textContent).toBe("Done.");
     });

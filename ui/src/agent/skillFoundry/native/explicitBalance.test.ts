@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Snapshot, Track } from "../../../types";
-import type { NativeSkillPayloadV1, StudioSkillEnvironmentV1 } from "../contracts";
+import type { NativeSkillPayloadV1, StudioSkillEnvironmentV1, StudioSkillProvenanceV1 } from "../contracts";
 import { explicitBalanceV1 } from "./explicitBalance";
 
 type FakeBridgeResult = { readonly ok: boolean; readonly error?: string; readonly data?: unknown };
@@ -35,7 +35,7 @@ class FakeEngine {
   private sourceStatusCallIndex = 0;
   private readonly txns = new Map<string, FakeTxn>();
   failCommandOnce: string | null = null;
-  readonly batchBeginCalls: { transactionId: string; commands: readonly { command: string }[] }[] = [];
+  readonly batchBeginCalls: { transactionId: string; commands: readonly { command: string }[]; args: Record<string, unknown> }[] = [];
 
   constructor(tracks: Track[], selectedTrackId: string | null) {
     this.tracks = tracks;
@@ -83,7 +83,7 @@ class FakeEngine {
     if (command === "batch_begin") {
       const transactionId = args.transactionId as string;
       const commands = args.commands as { index: number; requestId: string; command: string }[];
-      this.batchBeginCalls.push({ transactionId, commands });
+      this.batchBeginCalls.push({ transactionId, commands, args });
       const preFingerprint = this.fingerprint();
       const txn: FakeTxn = {
         status: "open", manifestCount: commands.length, applied: 0,
@@ -143,9 +143,10 @@ function track(overrides: Partial<Track> = {}): Track {
   return { id: "track-1", index: 0, name: "Bass", type: "audio", clips: [], ...overrides };
 }
 
-function environmentFor(engine: FakeEngine): StudioSkillEnvironmentV1 {
+function environmentFor(engine: FakeEngine, provenance?: StudioSkillProvenanceV1): StudioSkillEnvironmentV1 {
   let counter = 0;
   return {
+    ...(provenance ? { provenance } : {}),
     context: () => engine.context(),
     snapshot: async () => engine.snapshot(),
     exec: (command, args, transaction) => engine.exec(command, args as Record<string, unknown>, transaction),
@@ -330,5 +331,29 @@ describe("explicitBalanceV1 — atomic executor discipline", () => {
     const outcome = await explicitBalanceV1({ payload: PAYLOAD, environment, utterance: "mute it", slots: { action: "mute" } });
     expect(outcome).toMatchObject({ kind: "blocked", code: "manifest_stale" });
     expect(engine.tracks[0]!.mute).toBeFalsy();
+  });
+});
+
+// Step-1 slice 6 — a studio-skill transaction is a TURN. The environment MAY carry the
+// composer's turn provenance; the handler forwards it verbatim into batch_begin's args so
+// the engine stamps `turn_id` on every in-batch JSONL line. Absent ⇒ the args are
+// byte-identical to before (the atomic-plan keys alone, in their existing order).
+describe("explicitBalanceV1 — batch_begin provenance (step-1 slice 6)", () => {
+  it("forwards the environment's turn_id / source / utterance into batch_begin args", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Drums" })], "track-1");
+    const provenance = { turn_id: "turn-7", source: "studio_skill", utterance: "mute it" };
+    const outcome = await explicitBalanceV1({ payload: PAYLOAD, environment: environmentFor(engine, provenance), utterance: "mute it", slots: { action: "mute" } });
+    expect(outcome).toMatchObject({ kind: "completed" });
+    expect(engine.batchBeginCalls).toHaveLength(1);
+    const args = engine.batchBeginCalls[0]!.args;
+    expect(args).toMatchObject({ name: PAYLOAD.id, turn_id: "turn-7", source: "studio_skill", utterance: "mute it" });
+    expect(Object.keys(args)).toEqual(["transactionId", "name", "commands", "turn_id", "source", "utterance"]);
+  });
+
+  it("batch_begin args are unchanged when the environment carries no provenance", async () => {
+    const engine = new FakeEngine([track({ id: "track-1", name: "Drums" })], "track-1");
+    await explicitBalanceV1({ payload: PAYLOAD, environment: environmentFor(engine), utterance: "mute it", slots: { action: "mute" } });
+    expect(engine.batchBeginCalls).toHaveLength(1);
+    expect(Object.keys(engine.batchBeginCalls[0]!.args)).toEqual(["transactionId", "name", "commands"]);
   });
 });

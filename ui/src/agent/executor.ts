@@ -56,7 +56,9 @@ export const HISTORY_CONTROL_BATCH_REASON = "undo and redo must run alone";
 // metadata on the existing log path: not a new command, not a second log.
 export type TurnMeta = { utterance?: string; source?: string };
 
-function newTurnId(): string {
+// Exported (step-1 slice 6) so the composer's studio-skill environment mints its turn ids
+// from the same generator as the batch markers — one id space, never two formats.
+export function newTurnId(): string {
   try {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   } catch {
