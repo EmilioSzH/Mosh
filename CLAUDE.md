@@ -15,14 +15,25 @@ re-platforming without postmortem + cooling period + owner sign-off; one genre
 at a time), and the approved produce-lane direction. That contract governs all
 future work in this repo.
 
-**Pivot 2026-09-07 (owner-approved 2026-09-04; amendment pending signature):** Moshi is
-Mosh's recording and mixing engineer first. Governing documents:
+**Pivot 2026-09-07 (owner-approved 2026-09-04; amendment signed 2026-09-05, effective
+2026-09-07):** Moshi is Mosh's recording and mixing engineer first. Governing documents:
 [docs/CONTRACT-AMENDMENT-2026-09-07.md](docs/CONTRACT-AMENDMENT-2026-09-07.md) (amendment and
 supersession record), [docs/pivot-2026-09/CAPABILITY-AUDIT-2026-09-05.md](docs/pivot-2026-09/CAPABILITY-AUDIT-2026-09-05.md)
-(current-commit audit and label census), [docs/pivot-2026-09/PLAN-90-DAY-2026-09-07.md](docs/pivot-2026-09/PLAN-90-DAY-2026-09-07.md)
-and the single first implementation brief
-[docs/pivot-2026-09/BRIEF-STEP1-USEFUL-EDITS-EXACTLY-ONCE.md](docs/pivot-2026-09/BRIEF-STEP1-USEFUL-EDITS-EXACTLY-ONCE.md).
+(current-commit audit and label census, pinned to `0da6c638`), and
+[docs/pivot-2026-09/PLAN-90-DAY-2026-09-07.md](docs/pivot-2026-09/PLAN-90-DAY-2026-09-07.md).
 The produce lane is parked at round 4; the weekly flywheel-lab obligation is superseded.
+
+**Current state (2026-09-06).** Step 1 "useful edits exactly once" is delivered, audited twice,
+accepted and **merged** (PR #698 → `914faf85`); its brief is a delivered record, not a live task.
+The validation-first amendment
+([docs/pivot-2026-09/HANDOFF-2026-09-06-VALIDATION-FIRST.md](docs/pivot-2026-09/HANDOFF-2026-09-06-VALIDATION-FIRST.md))
+moves the next investment from building mix autonomy to **testing musical value on the owner's
+own song**. Start at
+[docs/pivot-2026-09/RECONCILIATION-2026-09-06.md](docs/pivot-2026-09/RECONCILIATION-2026-09-06.md):
+it carries the current-state delta, the exact-interface feasibility matrix, the stamped census
+(14 counted / 0 mixing, against a gate of 25), the recorded conflicts, and the single next task —
+[docs/pivot-2026-09/BRIEF-REHEARSAL-SONGA-2026-09-06.md](docs/pivot-2026-09/BRIEF-REHEARSAL-SONGA-2026-09-06.md).
+The frozen Song A experiment is [MIX-PACKAGE-V0.md](docs/pivot-2026-09/MIX-PACKAGE-V0.md) §7.
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) for the code map,
 [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) for the selected/archived
