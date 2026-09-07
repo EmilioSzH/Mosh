@@ -1,0 +1,21 @@
+# Rehearsal process 1 — drive an existing project, commit one transaction, undo it,
+# then leave a FAILED transaction behind and exit cleanly (no crash).
+{"command": "open_project", "args": {"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/rehearsal/proj/greg.mosh"}}
+{"command": "__wait", "args": {"ms": 500}}
+{"command": "__snapshot", "args": {"label": "base"}}
+# --- control: a transaction that commits ---
+{"command": "batch_begin", "args": {"transactionId": "T-good", "name": "rehearsal good", "commands": [{"index": 0, "requestId": "r0", "command": "set_track_volume"}]}}
+{"command": "set_track_volume", "args": {"trackId": "1015", "db": -2.0}, "transaction": {"transactionId": "T-good", "requestId": "r0", "index": 0}}
+{"command": "batch_end", "args": {"transactionId": "T-good"}}
+{"command": "__snapshot", "args": {"label": "after_good"}}
+# --- one undo must restore the pre-edit value ---
+{"command": "undo", "args": {}}
+{"command": "__snapshot", "args": {"label": "after_undo"}}
+# --- the defect's trigger: a manifested command that FAILS. A bad trackId returns
+# errResult before beginTxn (MoshOps.Tracks.cpp:867), so the entry fails and the
+# transaction is recorded `failed` (MoshOps.cpp:1769) — non-terminal per isTerminalStatus.
+{"command": "batch_begin", "args": {"transactionId": "T-fail", "name": "rehearsal fail", "commands": [{"index": 0, "requestId": "r0", "command": "set_track_volume"}]}}
+{"command": "set_track_volume", "args": {"trackId": "999999", "db": -2.0}, "transaction": {"transactionId": "T-fail", "requestId": "r0", "index": 0}}
+{"command": "batch_end", "args": {"transactionId": "T-fail"}}
+{"command": "__snapshot", "args": {"label": "after_fail"}}
+{"command": "save", "args": {}}

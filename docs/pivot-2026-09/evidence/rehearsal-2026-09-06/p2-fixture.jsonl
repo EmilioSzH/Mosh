@@ -1,0 +1,8 @@
+# Rehearsal process 2 — SAME session directory, clean relaunch. Does the skill lane
+# still serve a transactional batch, or has the failed record latched it shut?
+{"command": "open_project", "args": {"file": "/private/tmp/claude-501/-Users-emiliosanchez-harris-Mosh--claude-worktrees-affectionate-banach-08583b/8290031e-a025-4c4c-b257-9b8f43e941ba/scratchpad/rehearsal/proj/greg.mosh"}}
+{"command": "__wait", "args": {"ms": 500}}
+{"command": "batch_begin", "args": {"transactionId": "T-after-restart", "name": "rehearsal after restart", "commands": [{"index": 0, "requestId": "r0", "command": "set_track_volume"}]}}
+{"command": "set_track_volume", "args": {"trackId": "1015", "db": -4.0}, "transaction": {"transactionId": "T-after-restart", "requestId": "r0", "index": 0}}
+{"command": "batch_end", "args": {"transactionId": "T-after-restart"}}
+{"command": "__snapshot", "args": {"label": "after_restart"}}

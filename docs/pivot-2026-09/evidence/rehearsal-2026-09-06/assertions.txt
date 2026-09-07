@@ -1,0 +1,31 @@
+
+ASSERTION                                                                                       RESULT
+------------------------------------------------------------------------------------------------------------
+ledger holds exactly the two transactions the fixture created (no stray records)                PASS
+                                                                                                  ids=['T-fail', 'T-good']
+T-good's last record is terminal                                                                PASS
+                                                                                                  status=committed
+T-fail's last record is NON-terminal (this is the defect)                                       PASS
+                                                                                                  status=failed
+T-fail applied nothing and its fingerprint equals its pre-fingerprint (the state is unambiguous PASS
+                                                                                                  applied=0 pre=5e318629 post=5e318629
+the committed edit moved the Lead fader                                                         PASS
+                                                                                                  base=0.0 after_good=-2.0
+ONE undo restored the pre-edit value                                                            PASS
+                                                                                                  base=0.0 after_undo=0.0
+process 2's batch_begin was REFUSED after a clean restart                                       PASS
+                                                                                                  unresolved_after_restart: transaction T-fail from a previous run is unresolved; recover or discard the session
+the snapshot publishes NO field naming the unresolved transaction (so no UI can show it)        PASS
+                                                                                                  matching session keys=none
+the snapshot carries NO recovery key at all, so the recovery banner cannot appear either — ther PASS
+                                                                                                  recovery-ish keys=none
+all seven tracks still present                                                                  PASS
+                                                                                                  count=7
+every clip is still 92.6896875 s (no auto-tempo stretch)                                        PASS
+                                                                                                  n=7 lengths=[92.6896875]
+no clip has auto-tempo armed                                                                    PASS
+                                                                                                  autoTempo values=[False]
+the mixer plugin inventory is unchanged (7 level faders, nothing added)                         PASS
+                                                                                                  n=7 ['moshTrackMute', 'moshTrackMute', 'moshTrackMute', 'moshTrackMute', 'moshTrackMute', 'moshTrackMute', 'moshTrackMute']
+------------------------------------------------------------------------------------------------------------
+13/13 assertions passed
