@@ -31,6 +31,26 @@ describe("A2 crash-recovery notice", () => {
   });
 });
 
+describe("step-2 item A — a transaction blocking the skill lane", () => {
+  beforeEach(() => useStore.setState({ recoveryDismissed: false }));
+
+  it("shows the notice with NO crash and nothing to replay", () => {
+    // The whole defect: this state needs no unclean shutdown, so recoveryAvailable is absent
+    // and after one clean relaunch the session.running sentinel is long gone. Gating the
+    // notice on a crash hid the only UI that can clear the block — Dismiss runs
+    // discard_recovery, which is exactly the command that resolves it.
+    const blocked = snapSession({ unresolvedTransactions: { count: 1, ids: ["T-fail"] } });
+    expect(shouldShowRecoveryNotice(blocked, false)).toBe(true);
+    expect(shouldShowRecoveryNotice(blocked, true)).toBe(false);
+  });
+
+  it("stays hidden when nothing is blocking", () => {
+    // Guards against a predicate that is true for the mere presence of the field.
+    expect(shouldShowRecoveryNotice(snapSession({ unresolvedTransactions: { count: 0, ids: [] } }), false)).toBe(false);
+    expect(shouldShowRecoveryNotice(snapSession({}), false)).toBe(false);
+  });
+});
+
 describe("FS-T2 plugin-crash safe mode", () => {
   beforeEach(() => useStore.setState({ recoveryDismissed: false }));
 

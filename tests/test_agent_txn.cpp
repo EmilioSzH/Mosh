@@ -354,12 +354,11 @@ TEST_CASE ("ledger: a record carries ids/status/outcome and NO args or home path
     REQUIRE_FALSE (text.contains ("/Users/"));
 }
 
-TEST_CASE ("unresolvedIdsIn: an id whose last record is non-terminal is unresolved", "[agenttxn]")
+TEST_CASE ("unresolvedIdsIn: an id whose last record still BLOCKS is unresolved", "[agenttxn]")
 {
     // The fixture must actually CARRY an unresolved transaction, or "no unresolved ids"
     // is a vacuous pass.
     REQUIRE (tx::unresolvedIdsIn ({ line ("a", tx::statusOpen()) }) == StringArray { "a" });
-    REQUIRE (tx::unresolvedIdsIn ({ line ("a", tx::statusFailed()) }) == StringArray { "a" });
     REQUIRE (tx::unresolvedIdsIn ({ line ("a", tx::statusNeedsRecovery()) }) == StringArray { "a" });
 
     // …and a resolved one is not.
@@ -368,6 +367,51 @@ TEST_CASE ("unresolvedIdsIn: an id whose last record is non-terminal is unresolv
     REQUIRE (tx::unresolvedIdsIn ({ line ("a", tx::statusOpen()),
                                     line ("a", tx::statusFailed()),
                                     line ("a", tx::statusRolledBack()) }).isEmpty());
+}
+
+TEST_CASE ("unresolvedIdsIn: a FAILED transaction does not block the next process", "[agenttxn]")
+{
+    // Step-2 item A. This expectation is the reverse of what it was before 2026-09-06, and the
+    // reversal is the fix: `failed` is a REPORTED OUTCOME, not lost information. The engine
+    // refused a command, told its caller, and wrote a record carrying the true applied count
+    // and a post-state fingerprint measured in that same process.
+    //
+    // Treating it as unfinished business cost the user every deterministic skill for the life
+    // of the session directory — with no crash involved, nothing published in the snapshot to
+    // explain it, and (because the recovery banner is gated on an unclean shutdown that never
+    // happened) no UI route out. Reproduced end to end on 2026-09-06 with two clean processes:
+    // docs/pivot-2026-09/evidence/rehearsal-2026-09-06/.
+    REQUIRE (tx::unresolvedIdsIn ({ line ("a", tx::statusFailed()) }).isEmpty());
+    REQUIRE (tx::unresolvedIdsIn ({ line ("a", tx::statusOpen()),
+                                    line ("a", tx::statusFailed()) }).isEmpty());
+
+    // The genuinely ambiguous cases are untouched — this narrows the predicate, it does not
+    // disarm it.
+    const StringArray mixed {
+        line ("committed-one", tx::statusOpen()), line ("committed-one", tx::statusCommitted()),
+        line ("failed-one",    tx::statusOpen()), line ("failed-one",    tx::statusFailed()),
+        line ("open-one",      tx::statusOpen()),
+        line ("needs-one",     tx::statusOpen()), line ("needs-one",     tx::statusNeedsRecovery()),
+    };
+    REQUIRE (tx::unresolvedIdsIn (mixed) == StringArray { "open-one", "needs-one" });
+}
+
+TEST_CASE ("blocksLaterProcess is not the negation of isTerminalStatus", "[agenttxn]")
+{
+    // The two questions are different, and conflating them is what caused the defect above.
+    // `failed` is the one status that is neither terminal nor blocking: the transaction did
+    // not commit and was not rolled back, but the next process has nothing to resolve.
+    REQUIRE      (tx::isTerminalStatus   (tx::statusCommitted()));
+    REQUIRE      (tx::isTerminalStatus   (tx::statusRolledBack()));
+    REQUIRE_FALSE(tx::isTerminalStatus   (tx::statusFailed()));
+    REQUIRE_FALSE(tx::isTerminalStatus   (tx::statusOpen()));
+    REQUIRE_FALSE(tx::isTerminalStatus   (tx::statusNeedsRecovery()));
+
+    REQUIRE      (tx::blocksLaterProcess (tx::statusOpen()));
+    REQUIRE      (tx::blocksLaterProcess (tx::statusNeedsRecovery()));
+    REQUIRE_FALSE(tx::blocksLaterProcess (tx::statusFailed()));
+    REQUIRE_FALSE(tx::blocksLaterProcess (tx::statusCommitted()));
+    REQUIRE_FALSE(tx::blocksLaterProcess (tx::statusRolledBack()));
 }
 
 TEST_CASE ("unresolvedIdsIn: interleaved ids resolve independently, in first-seen order", "[agenttxn]")

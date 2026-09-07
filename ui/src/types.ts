@@ -899,6 +899,10 @@ export type Snapshot = {
     // project is READ-ONLY (the backend refuses save(), including the 30s auto-save, rather
     // than overwrite the producer's plugin chain with the stripped version).
     safeModeActive?: boolean;
+    // Step-2 item A — skill transactions a PREVIOUS run left unresolved. While this is present
+    // the engine refuses every transactional skill batch, so the notice must be able to see it;
+    // it needs no crash, so it is independent of recoveryAvailable. Absent when nothing blocks.
+    unresolvedTransactions?: { count: number; ids: string[] };
     recentProjects?: { path: string; name: string }[]; // gap 2 — Recent list (newest-first)
     projectExtension?: string; // backend-owned project container extension (no leading dot)
     // SES-001 — the tempo MAP (additive; tempo/timeSig* above stay point 0).
