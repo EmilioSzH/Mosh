@@ -1216,10 +1216,15 @@ juce::var MoshOps::cmdBatchBegin (const juce::var& args)
     // call a crash-interrupted edit clean merely because the in-memory inBatch flag
     // disappeared".
     if (! unresolvedTxnIds_.isEmpty())
+        // Name EVERY blocking id, not just the first: resolving one and finding the refusal
+        // unchanged, with the same wording, reads as a broken remedy rather than a second id.
         return errResult ("batch_begin",
-                          agenttxn::codeUnresolvedRestart() + ": transaction "
-                          + unresolvedTxnIds_[0] + " from a previous run is unresolved; "
-                          "recover or discard the session before running a skill");
+                          agenttxn::codeUnresolvedRestart() + ": transaction"
+                          + juce::String (unresolvedTxnIds_.size() == 1 ? " " : "s ")
+                          + unresolvedTxnIds_.joinIntoString (", ")
+                          + " from a previous run "
+                          + juce::String (unresolvedTxnIds_.size() == 1 ? "is" : "are")
+                          + " unresolved; recover or discard the session before running a skill");
 
     const auto name = args.getProperty ("name", var()).toString();
     std::vector<agenttxn::ManifestEntry> manifest;
@@ -3280,6 +3285,23 @@ juce::var MoshOps::snapshot()
     // FS-T2 — the live Edit was loaded with third-party plugins scrubbed. READ-ONLY (save()
     // refuses), so the UI must say so plainly rather than let the producer believe their work
     // is being auto-saved.
+    // Step-2 item A — a transaction left unresolved by a PREVIOUS process refuses every
+    // skill batch (cmdBatchBegin's first transactional check). Until this field existed the
+    // snapshot said nothing about it, so no UI could show it: the recovery banner is gated on
+    // wasUncleanShutdown() and this state needs no crash, so after one clean relaunch the
+    // banner was gone and the block was invisible and permanent. Publishing it is what turns a
+    // dead session directory into one `discard_recovery` click. Transaction semantics are
+    // unchanged — this only tells the truth about a state the engine was already in.
+    if (! unresolvedTxnIds_.isEmpty())
+    {
+        auto* u = new DynamicObject();
+        u->setProperty ("count", unresolvedTxnIds_.size());
+        juce::Array<var> ids;
+        for (const auto& id : unresolvedTxnIds_)
+            ids.add (id);
+        u->setProperty ("ids", ids);
+        session->setProperty ("unresolvedTransactions", var (u));
+    }
     if (eng.inSafeMode())
         session->setProperty ("safeModeActive", true);
     if (eng.wasPluginCrashSuspected())

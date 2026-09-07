@@ -1,0 +1,25 @@
+# Step-2 item A, RUN 2 of 2 — the same session directory, a clean relaunch.
+#
+# BEFORE the fix, batch_begin here was refused:
+#   unresolved_after_restart: transaction T-fail from a previous run is unresolved;
+#   recover or discard the session before running a skill
+# and the snapshot carried NO recovery key at all, so no UI could explain or clear it.
+#
+# AFTER the fix, batch_begin is served: a `failed` transaction is a reported outcome, not
+# unfinished business (agenttxn::blocksLaterProcess). A genuinely ambiguous `open` or
+# `needs_recovery` record still blocks, and `session.unresolvedTransactions` now publishes it
+# so RecoveryNotice can show it and Dismiss (discard_recovery) can clear it.
+#
+# Pass = batch_begin ok:true, the fader reads -4 dB, and session.unresolvedTransactions is
+# absent from the snapshot.
+#
+# Verified 2026-09-06 on the real Song A project: BEFORE the fix run 2 exited 3 with the
+# refusal above; AFTER it, run 2 exits 0 and its transaction goes open -> committed.
+# Evidence: docs/pivot-2026-09/evidence/rehearsal-2026-09-06/.
+{"command":"__snapshot","args":{"label":"reopened"}}
+{"command":"create_track","args":{"name":"Probe"},"capture":{"P":"trackId"}}
+{"command":"__wait","args":{"ms":300}}
+{"command":"batch_begin","args":{"transactionId":"T-after-restart","name":"repro after restart","commands":[{"index":0,"requestId":"r0","command":"set_track_volume"}]}}
+{"command":"set_track_volume","args":{"trackId":"${P}","db":-4.0},"transaction":{"transactionId":"T-after-restart","requestId":"r0","index":0}}
+{"command":"batch_end","args":{"transactionId":"T-after-restart"}}
+{"command":"__snapshot","args":{"label":"after_restart"}}

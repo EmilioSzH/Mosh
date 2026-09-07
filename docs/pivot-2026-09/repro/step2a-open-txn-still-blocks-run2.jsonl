@@ -1,0 +1,15 @@
+# Regression guard, run 2 of 2 — the ambiguous `open` transaction must STILL block, and the
+# snapshot must now publish it so a UI can explain and clear it.
+#
+# This is the proof that the fix NARROWED the predicate rather than disarming it. Verified
+# 2026-09-06 against the repaired binary:
+#   batch_begin  -> refused, "unresolved_after_restart: transaction T-open ..."  (still blocks)
+#   snapshot     -> session.unresolvedTransactions = {"count":1,"ids":["T-open"]}
+#                   with recoveryAvailable and safeModeActive both ABSENT — exactly the state
+#                   in which the recovery notice could never render before this field existed.
+# Run both files against one session directory; see step2a-failed-txn-blocks-run1.jsonl for
+# the invocation.
+{"command":"__snapshot","args":{"label":"blocked"}}
+{"command":"create_track","args":{"name":"Probe"},"capture":{"P":"trackId"}}
+{"command":"__wait","args":{"ms":300}}
+{"command":"batch_begin","args":{"transactionId":"T-should-be-refused","name":"regression refused","commands":[{"index":0,"requestId":"r0","command":"set_track_volume"}]}}

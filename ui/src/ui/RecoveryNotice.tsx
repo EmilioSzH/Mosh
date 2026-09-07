@@ -2,17 +2,26 @@ import { useStore } from "../store";
 import type { Snapshot } from "../types";
 
 /** Pure visibility rule (testable without a DOM): show when the backend flagged an unclean
- *  prior exit, OR when a third-party plugin is implicated in a crash — and the user hasn't
- *  dismissed it this session.
+ *  prior exit, OR when a third-party plugin is implicated in a crash, OR when a transaction
+ *  from a previous run is still blocking the skill lane — and the user hasn't dismissed it
+ *  this session.
  *
  *  FS-T2: the plugin conditions are deliberately NOT gated on recoveryAvailable. A plugin
  *  that crashes while the project is LOADING dies before the `session.running` sentinel is
  *  written, so recoveryAvailable is false in exactly the case the producer most needs an
- *  explanation for — their plugins are missing and the project is read-only. */
+ *  explanation for — their plugins are missing and the project is read-only.
+ *
+ *  Step-2 item A: `unresolvedTransactions` is likewise NOT gated on recoveryAvailable, and for
+ *  the same reason turned inside out — that state needs no crash at all. A skill transaction
+ *  that was merely interrupted leaves it, the `session.running` sentinel is long gone after one
+ *  clean relaunch, and without this condition the only UI that can clear the block never
+ *  renders. Dismiss runs `discard_recovery`, which is exactly the command that clears it. */
 export function shouldShowRecoveryNotice(snapshot: Snapshot | null, dismissed: boolean): boolean {
   if (dismissed) return false;
   const s = snapshot?.session;
-  return Boolean(s?.recoveryAvailable) || Boolean(s?.safeModeActive) || (s?.pluginCrashSuspects?.length ?? 0) > 0;
+  return Boolean(s?.recoveryAvailable) || Boolean(s?.safeModeActive)
+    || (s?.pluginCrashSuspects?.length ?? 0) > 0
+    || (s?.unresolvedTransactions?.count ?? 0) > 0;
 }
 
 /** FS-T2 — what the notice should say/offer about third-party plugins.
@@ -52,6 +61,8 @@ export function RecoveryNotice() {
   const count = snapshot?.session.recoverableCount ?? 0;
   const safe = safeModeOffer(snapshot);
   const unclean = Boolean(snapshot?.session.recoveryAvailable);
+  // Step-2 item A — how many transactions from a previous run are still refusing every skill.
+  const blockedTxns = snapshot?.session.unresolvedTransactions?.count ?? 0;
 
   const onRecover = async () => {
     await exec("recover_session", {});
@@ -101,7 +112,14 @@ export function RecoveryNotice() {
         <>
           {unclean
             ? "↩ Your last session ended unexpectedly — restored from the last auto-save."
-            : "⚠ The last launch crashed while loading a plugin."}
+            : blockedTxns > 0
+              ? // Say what is actually broken and what fixes it. The old copy claimed a plugin
+                // crash, which is not what this state is — an edit from a previous run was
+                // interrupted, and until it is cleared Moshi refuses every instruction.
+                `⚠ ${blockedTxns} unfinished edit${blockedTxns === 1 ? "" : "s"} from a previous run ${
+                  blockedTxns === 1 ? "is" : "are"
+                } blocking Moshi — your project is untouched, but Moshi won't make changes until you dismiss this.`
+              : "⚠ The last launch crashed while loading a plugin."}
           {count > 0 && (
             <>
               {" "}<strong>{count}</strong> unsaved change{count === 1 ? "" : "s"} can be recovered.

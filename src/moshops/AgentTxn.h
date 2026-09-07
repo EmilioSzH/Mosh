@@ -25,10 +25,35 @@ inline const juce::String& statusCommitted()     { static const juce::String s (
 inline const juce::String& statusRolledBack()    { static const juce::String s ("rolled_back");    return s; }
 inline const juce::String& statusNeedsRecovery() { static const juce::String s ("needs_recovery"); return s; }
 
-/** A status a *later* process must treat as unfinished business. */
+/** The two statuses that end a transaction's life: it committed, or it was rolled back. */
 inline bool isTerminalStatus (const juce::String& status)
 {
     return status == statusCommitted() || status == statusRolledBack();
+}
+
+/** Whether a *later* process must treat this status as unfinished business, i.e. as a reason
+    to refuse every subsequent skill until a human resolves it.
+
+    This is deliberately NOT `! isTerminalStatus(...)`. Terminality and ambiguity are different
+    questions, and conflating them is what made an ordinary refusal disable a session directory
+    for good (step-2 item A, reproduced 2026-09-06):
+
+      • `open` blocks. The process died between the begin record and any outcome, so whether
+        the last manifested command landed is genuinely unknown.
+      • `needs_recovery` blocks. That status exists precisely to say "a human must look".
+      • `failed` does NOT block. It is a *reported outcome*, not a loss of information: the
+        engine refused a command, told its caller so, and wrote a record carrying the true
+        applied count and a post-state fingerprint measured in that same process. The
+        overwhelmingly common shape is applied=0 with the post fingerprint equal to the pre
+        fingerprint — nothing happened, and the ledger says nothing happened. Blocking on that
+        cost the user every deterministic skill for the life of the session directory, with no
+        crash involved and no UI route out.
+
+    `failed` therefore ends the transaction's claim on the *next* process without pretending it
+    committed or was rolled back — which is why `isTerminalStatus` above is left alone. */
+inline bool blocksLaterProcess (const juce::String& status)
+{
+    return status == statusOpen() || status == statusNeedsRecovery();
 }
 
 // ── per-entry state (fs-b2.md: pending | applied | failed) ──
@@ -402,7 +427,7 @@ inline juce::var makeLedgerRecord (const juce::String& transactionId,
     return juce::var (o);
 }
 
-/** Every transaction id whose LAST record is non-terminal, in first-seen order.
+/** Every transaction id whose LAST record still blocks a later process, in first-seen order.
     Unparseable and unversioned lines are skipped rather than fatal: a torn final line
     (the shape a crash actually leaves) must not make the whole ledger unreadable, and a
     torn line for an id whose `begin` was already recorded still leaves that id
@@ -431,7 +456,7 @@ inline juce::StringArray unresolvedIdsIn (const juce::StringArray& lines)
 
     juce::StringArray unresolved;
     for (const auto& id : order)
-        if (! isTerminalStatus (lastStatus[id]))
+        if (blocksLaterProcess (lastStatus[id]))
             unresolved.add (id);
     return unresolved;
 }
