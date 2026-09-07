@@ -286,13 +286,16 @@ means**: there is no declared sub-region to preserve outside of, and the honest 
 source preservation via `originalSourceRef` plus a proven `reset_render_layer` round-trip.
 §7.8's region row stays **unverified until the rehearsal demonstrates that round-trip**.
 
-**The 8-second figure was wrong as a cap.** `SA3_SECONDS` (default 8.0) is the *initial latent
-grid*; per-clip retargeting is RoPE-free and the real ceiling is `MOSH_SA3_MAX_CONTIGUOUS = 240 s`
-(`service/sa3/engine.py:41-42`). The Beat is 92.69 s, comfortably under it, so a **contiguous,
-seamless** render may well be what happens. Whether this render goes contiguous or falls back to
-`coverage: "stitch"` (independent windows crossfaded at 1 ms, `service/clip_coverage.py:51-59`) is
-**measured by the rehearsal and recorded**, not asserted here. **G is a re-imagination, not a
-mix** either way.
+**The 8-second figure was wrong as a cap, and the seams do not exist. Measured 2026-09-06.**
+`SA3_SECONDS` (default 8.0) is the *initial latent grid*; retargeting is RoPE-free and the real
+ceiling is `MOSH_SA3_MAX_CONTIGUOUS = 240 s` (`service/sa3/engine.py:41-42`). A whole-clip render
+of the real 92.6896875 s Beat returns `coverage: "single"` — **one contiguous window, no
+stitching, no crossfades, no seams** — in **22 s wall**, including app startup
+([evidence](evidence/rehearsal-2026-09-06/SA3-PREFLIGHT.md)).
+
+So the earlier caveat that "G's seams are a property of the method" is **withdrawn for this
+song**: there are none. The only pipeline artefact left is the 44.1 kHz / 16-bit staging, which
+**G-STAGING-NULL** isolates. **G is still a re-imagination, not a mix** — that part stands.
 
 ### 7.6 Reverb on Song A — what the control actually is
 

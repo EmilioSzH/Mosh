@@ -99,12 +99,29 @@ recording a measurement is not ranking — but nothing in the experiment may rea
 listening protocol must not surface it. Recorded here so a later reader does not discover the
 field and assume it is available for selection.
 
-## 6. Still open
+## 6. Closed: the full beat renders contiguously in 22 seconds
 
-| Item | State |
+The measurement that decides whether condition G is affordable. Whole-clip render of the **real
+92.6896875 s beat**, seed 4242, `coverage: "auto"`:
+
+```json
+{"adapter": "stable_audio3", "coverage": "single", "duration_s": 92.69,
+ "seconds_pinned": 92.68968253968254, "sample_rate": 44100, "channels": 2}
+```
+
+| | |
 |---|---|
-| SA3 wall time and memory for the full 92.7 s beat | **not measured** — 8 s took ~5 s warm; the beat is 11.6× longer and is the number that matters for the "≤2 h unattended" target |
-| Whether the 92.7 s beat renders `single` or falls back to `stitch` | **not measured**; 8 s renders `single`, and `MOSH_SA3_MAX_CONTIGUOUS = 240 s` suggests it should, but that is inference, not observation |
+| Wall time | **22 s**, including app startup and import — for 92.69 s of audio |
+| Coverage | **`single`** — ONE contiguous window. No stitching, no crossfades, **no seams** |
+| Output | 16,350,504 bytes = 92.69 s at 44.1 kHz / 16-bit stereo · `cache: miss`, a real render |
 
-Condition G is **not blocked**. It needs one timed render of the real beat before the candidate
-set is built.
+**This falsifies a caveat the frozen spec carried.** §7.5 warned that G's seams were "a property
+of the method"; on this song there are none — `MOSH_SA3_MAX_CONTIGUOUS = 240 s` comfortably
+covers 92.69 s and the model renders it in one pass. G is a cleaner condition than assumed, and
+the only remaining pipeline artefact is the 44.1 kHz / 16-bit staging, which **G-STAGING-NULL**
+already isolates.
+
+Against the inherited "first pass ≤2 h unattended" target, a 22 s render is not a constraint
+worth planning around.
+
+**O-2 and O-4 are both closed. Condition G is unblocked and cheap.**
