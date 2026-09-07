@@ -1,0 +1,18 @@
+# Condition C — one bounded conventional vocal treatment. Operator work, logged verbatim.
+{"command": "open_project", "args": {"file": "/Users/emiliosanchez-harris/Library/Mosh/mix-2026-09-songA-first-pass/r1/cond-c/greg.mosh"}}
+{"command": "__wait", "args": {"ms": 500}}
+{"command": "__snapshot", "args": {"label": "before"}}
+{"command": "load_builtin", "args": {"trackId": "1015", "type": "highpass"}, "capture": {"HP_lead": "index"}}
+{"command": "load_builtin", "args": {"trackId": "1020", "type": "highpass"}, "capture": {"HP_double": "index"}}
+{"command": "load_builtin", "args": {"trackId": "1025", "type": "highpass"}, "capture": {"HP_background": "index"}}
+{"command": "load_builtin", "args": {"trackId": "1015", "type": "compressor"}, "capture": {"CMP": "index"}}
+# compressor param 1 ratio: below the 0.526 default — gentler
+{"command": "set_plugin_param", "args": {"trackId": "1015", "index": "${CMP}", "paramIndex": 1, "value": 0.35}}
+# compressor param 3 release: above the 0.310 default — faster recovery
+{"command": "set_plugin_param", "args": {"trackId": "1015", "index": "${CMP}", "paramIndex": 3, "value": 0.45}}
+{"command": "load_builtin", "args": {"trackId": "1015", "type": "4bandEq"}, "capture": {"EQ": "index"}}
+# 4bandEq param 10 = High-shelf gain, 0.5 unity -> 0.58 small lift
+{"command": "set_plugin_param", "args": {"trackId": "1015", "index": "${EQ}", "paramIndex": 10, "value": 0.58}}
+# Readback: the snapshot must show each parameter at the value asked for.
+{"command": "__snapshot", "args": {"label": "after"}}
+{"command": "export_audio", "args": {"file": "/Users/emiliosanchez-harris/Library/Mosh/mix-2026-09-songA-first-pass/r1/COND-C.wav", "format": "wav", "bitDepth": 32, "range": "full", "tail": "cut"}}
