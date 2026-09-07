@@ -96,3 +96,24 @@ first item of step 2. Consequences, recorded so nothing is quietly lost:
 - Merging to main is a separate decision and needs the native gate
   (`scripts/auto-loop/gate.sh native <worktree> origin/main`). Nothing has been pushed or merged.
 
+## Appended 2026-09-06 — the merge happened
+
+Recorded after the fact; the paragraph above keeps its own date and is not rewritten.
+
+Step 1 was merged as **PR #698 → `914faf85`**, with PR #697 (v3 shell) merged just before it as
+`43ad4467`. The native gate ran at `d20fcede`: 205 eval rows, 154 pass, 0 FAIL, GATE: PASS. CI on
+the merge commit completed success.
+
+Two things a later reader needs:
+
+1. **The merged tree is not exactly the audited tree.** It differs from audited `1453a647` by one
+   non-doc file — `scripts/daw-conformance/conformance.py` (`d20fcede`), which strips
+   `session.revision` in the harness canonicalizer, the third twin of a change whose other two
+   twins were already in the audited candidate. The native gate covered it; **no independent
+   audit saw it.**
+2. **No owner authorization line for the merge exists in this repository.** Flagged as conflict
+   C5 in [RECONCILIATION-2026-09-06.md](RECONCILIATION-2026-09-06.md) §6.5, not resolved there.
+
+Everything else in this record stands: the carried items are still carried, and step 1's one
+knowingly unmet criterion is still unmet.
+

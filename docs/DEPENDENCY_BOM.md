@@ -7,6 +7,14 @@ owner identifiers below are historical traceability, not active assignments or s
 advice — counsel-check items in §5. Prices and thresholds re-confirm at purchase. Longer clause excerpts
 live in the 2026-07-12 verification report (chat artifact); this doc carries paraphrase + pinpoint citations.**
 
+**Two ledgers, different scopes — do not mistake one for the other (noted 2026-09-06).** *This*
+document is the **shipping inventory and its obligations**: what a build contains and what that
+obliges. [docs/references/RESEARCH_AND_VERIFICATION-v2-2026-09-04.md](references/RESEARCH_AND_VERIFICATION-v2-2026-09-04.md)
+is the **research and verification ledger** (rows R01–R07, W01–W25) — candidate models, weights,
+adapters and upstream source licenses considered but not necessarily shipped. It is the license
+ledger of record named by [CONTRACT-AMENDMENT-2026-09-07](CONTRACT-AMENDMENT-2026-09-07.md)
+clause 8, and it is vendored verbatim: research access never implies shipping rights.
+
 ---
 
 ## §0. The two facts that matter most

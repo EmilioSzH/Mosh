@@ -5,10 +5,11 @@ branch starts. Root-caused and reproduced 2026-09-06; the reproducer below ran 3
 
 | | |
 |---|---|
-| Baseline | `claude/step1-useful-edits` @ `56b3ba63` (step 1 as accepted) |
+| Baseline | **`origin/main` @ `914faf856c1004eced9e85024f1b1a54ac25b195`** (updated 2026-09-06: step 1 merged as PR #698; the earlier `56b3ba63` predates the merge) |
 | Candidate | one branch/worktree from that SHA; one commit per numbered item; candidate SHA frozen before audit |
 | Repair policy | one bounded repair cycle after the independent audit, then a blocked verdict |
-| Evidence | `build-macos-arm64-release/recovery-probe/` on the investigating worktree; findings restated below with file:line |
+| Evidence | findings restated below with file:line. Acceptance artifacts go to a **new** `docs/pivot-2026-09/evidence/step2a-<candidate-sha>/` — never into an existing evidence directory |
+| Status | **standby.** [BRIEF-REHEARSAL-SONGA-2026-09-06.md](BRIEF-REHEARSAL-SONGA-2026-09-06.md) is the selected next task; its frozen decision rule starts **items 1–2 of this brief** if the ledger latches across a restart, if one undo fails to restore, or if a merely declined utterance writes a non-terminal record. Items 3–4 are real but off that critical path |
 
 ## 1. What actually happens
 
@@ -119,3 +120,38 @@ A session directory that has seen a failed or interrupted skill transaction serv
 ask normally, on the next launch, without a human clearing anything; a genuinely ambiguous orphan
 still stops the lane **and says so in words the user can act on**; the selftest and the two-run
 reproducer both prove it; no change to what a committed or rolled-back transaction means.
+
+## 6. Allowed files (added 2026-09-06)
+
+Nothing outside this table changes. Line numbers are the 2026-09-06 readings and are leads, not
+certifications — resolve each symbol at the candidate SHA.
+
+| File | Symbol / site | Item |
+|---|---|---|
+| `src/moshops/MoshOps.cpp` | `initTxnLedger` (~1569), its constructor call (~309), `cmdBatchBegin`'s first transactional check (~1218), `resolveUnresolvedTxns` (~1775), the `session.recoveryAvailable` publisher (~3267) | 1, 2, 3 |
+| `src/moshops/AgentTxn.h` | `isTerminalStatus` (~29) | 2 |
+| `ui/src/ui/RecoveryNotice.tsx` | visibility predicate and copy | 1 |
+| `ui/src/agent/skillFoundry/contracts.ts` | `SkillReasonCodeV1` (~72), the blocked-outcome reason field (~311) | 4 |
+| `ui/src/agent/skillFoundry/native/explicitBalance.ts` | the reason drop site (~525) | 4 |
+| `ui/src/agent/skillFoundry/declarativeExecutor.ts` | the reason drop site (~640) | 4 |
+| `src/app/SelfTest.cpp` | one new section for the two-run case | tests |
+| `docs/pivot-2026-09/repro/` | one promoted reproducer fixture | tests |
+
+## 7. Rollback
+
+Each numbered item is one commit, and each is independently revertible. Item 2 (treating `failed`
+as resolved at startup) is the behaviour change with the widest blast radius: reverting it
+restores today's conservative latch, which is safe but returns the defect. Item 3 (auto-resolving
+`open` orphans by fingerprint) must never auto-resolve while the engine has a project-load error
+or is in safe mode; if that guard cannot be proven, drop item 3 rather than weaken the guard.
+Items 1 and 4 are additive — a new snapshot field and a reason code — and reverting either only
+removes information.
+
+## 8. Permissions and stop conditions
+
+Documentation only until a candidate branch starts. No push, no merge, no deploy. The native gate
+(`scripts/auto-loop/gate.sh native <worktree> origin/main`) is required before any merge decision,
+and merging remains a separate owner decision. One bounded repair cycle after the independent
+audit, then a blocked verdict and a scope narrowed by the owner, not by the auditor — this brief
+does not reset any existing repair counter. `MoshSkillIdentityGate` refuses a Release build on a
+dirty tree: commit first or build Debug, and never modify the gate.
