@@ -255,7 +255,7 @@ an audio model.
 |---|---|
 | **C — bounded conventional control** | **available.** One recipe over `load_builtin` (compressor / eq / lowpass / highpass) plus `set_plugin_param` and faders. Every preset choice and manual step logged verbatim as **operator work** — C can establish that simple processing suffices, never that the system engineered anything |
 | **A — specialized automated processing** | **blocked, and dropped from round 1** (owner decision 2026-09-06). Two narrow reasons: no vendor account access, and no authorization to upload unreleased audio to a third party. Per handoff §7.2 a blocked condition **stays blocked** — it is never filled in after C and G are heard, and no substitute mixer takes its place. Unblocking needs a new dated authorization naming both reasons |
-| **G — explicit generative alternative** | **available, constrained.** `create_render_layer` on the **Beat clip only**, region-scoped, then `render_layer`. The vocal is structurally outside the operation |
+| **G — explicit generative alternative** | **available, constrained.** `create_render_layer` on the **Beat clip only**, **whole-clip** (see below), then `render_layer`. The vocal is structurally outside the operation |
 
 **Output allocation, declared before any listening:**
 
@@ -271,10 +271,28 @@ seed because SA3 stages through `stageWavRegionAt44k` (44.1 kHz / 16-bit) while 
 from a resample and a truncation. The owner may overrule this allocation, but **the choice is
 frozen before he hears anything**.
 
-G's region is chosen so its seams land where the arrangement already has a hole: start where the
-beat is sparse, end at the block-1 drum drop-out. SA3's window is 8 s, so a longer region is
-covered by `coverage: "stitch"` — independent renders crossfaded at 1 ms. **G is a
-re-imagination, not a mix**; its seams are a property of the method, not a defect to litigate.
+**G is a WHOLE-CLIP render — corrected 2026-09-06 from source, before anything ran.** The
+earlier design said "region-scoped", which would not have re-imagined the beat at all:
+
+- A **sub-region** render is rejected from in-place apply (`MoshOps.Generative.cpp:1183` for wave
+  clips, `:1232` for MIDI) and instead lands as a **new clip on a separate "Neural Renders"
+  track** via `accept_render` (`:2283-2371`). Useful, but it is an addition, not a re-imagination
+  of the Beat.
+- A **whole-clip** render auto-applies in place (`:1070-1078`), capturing the pristine path in
+  `originalSourceRef` (`:1199-1200`) so `reset_render_layer` (`:1298`) restores it exactly.
+
+So G renders the Beat clip whole. That also **changes what the region-preservation promise
+means**: there is no declared sub-region to preserve outside of, and the honest promise becomes
+source preservation via `originalSourceRef` plus a proven `reset_render_layer` round-trip.
+§7.8's region row stays **unverified until the rehearsal demonstrates that round-trip**.
+
+**The 8-second figure was wrong as a cap.** `SA3_SECONDS` (default 8.0) is the *initial latent
+grid*; per-clip retargeting is RoPE-free and the real ceiling is `MOSH_SA3_MAX_CONTIGUOUS = 240 s`
+(`service/sa3/engine.py:41-42`). The Beat is 92.69 s, comfortably under it, so a **contiguous,
+seamless** render may well be what happens. Whether this render goes contiguous or falls back to
+`coverage: "stitch"` (independent windows crossfaded at 1 ms, `service/clip_coverage.py:51-59`) is
+**measured by the rehearsal and recorded**, not asserted here. **G is a re-imagination, not a
+mix** either way.
 
 ### 7.6 Reverb on Song A — what the control actually is
 
@@ -475,9 +493,9 @@ satisfies Rule 1: one real mix action corrected, with a rating and a lesson.
 
 | Item | Why it matters | Closed by |
 |---|---|---|
-| **Does a sub-region `render_layer` splice back into the clip, or replace the clip's source?** | If it replaces, G's alignment and the whole region-preservation promise collapse. **The single most important pre-flight for G** | the rehearsal |
+| ~~Does a sub-region render splice or replace?~~ | — | **ANSWERED FROM SOURCE 2026-09-06**: neither. A sub-region render lands as a new clip on a separate track; only a whole-clip render applies in place. G was redesigned to whole-clip (§7.5). What remains open is narrower: **does the whole-clip `reset_render_layer` round-trip actually restore the Beat byte-for-byte** — the rehearsal demonstrates it |
 | Whether a merely *declined* utterance writes a ledger record | This experiment produces declines by design; if declines poison the session, the ledger repair becomes mandatory | the rehearsal |
-| Whether `--run-script` can open an existing `.mosh` and drive `batch_begin` against it | Both existing fixtures build projects from scratch; decides whether the rehearsal is possible at all | the rehearsal |
+| ~~Whether `--run-script` can open an existing `.mosh` and drive `batch_begin`~~ | — | **CLOSED 2026-09-06**: it can. `open_project` and `save_as` are dispatched natively without the UI-only filter (`MoshOps.cpp:929,931`), and `tests/crash-residue-smoke.sh` already drives `open_project` across a restart |
 | SA3 wall time and memory for a stitched multi-window region; `SA3_SECONDS` as actually installed | Sets whether G fits the unattended target and whether 4 outputs are affordable | the rehearsal |
 | Provenance of the built binary | §7.2 | the freeze manifest |
 | ~~Which range is "the hook"~~ | — | **CLOSED 2026-09-06**: bars 5–17 and 41–53, corroborated against the measured double-vocal edges (§7.3). Both are now contained whole, in E1 and E2 respectively |

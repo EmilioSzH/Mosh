@@ -191,17 +191,21 @@ available and musically useless, or musically useful and unembeddable.
 Recorded because they bound what condition G can possibly demonstrate, and because handoff §6
 forbids copying R3's generic capability table in place of the installed combination:
 
-1. **The render window is 8 seconds.** `SA3_SECONDS` defaults to `8.0`. A longer region is
-   covered by `coverage: "stitch"` — independent windows crossfaded at 1 ms. Musical continuity
-   across seams is guaranteed by nothing. `coverage: "loop"` renders one cycle and tiles it,
-   which on a 92.7 s arrangement would overwrite the structure. **G is a re-imagination, not a
-   mix**, and its seams are a property of the method.
-2. **The audio path is 44.1 kHz / 16-bit.** `MoshOps.Generative.cpp` stages the source through
-   `stageWavRegionAt44k`; a conventional treatment never leaves 48 kHz / 32-bit float. Any blind
-   "G sounds different" is confounded by a resample and a truncation unless that is separated.
-3. **Whether a sub-region render splices back into the clip or replaces it is not established.**
-   This decides whether a region-preservation promise can be made at all. Open; the rehearsal
-   brief closes it.
+1. **Sub-region renders do not modify the clip.** Corrected from source 2026-09-06: a sub-region
+   render is rejected from in-place apply (`MoshOps.Generative.cpp:1183`, `:1232`) and lands as a
+   **new clip on a separate "Neural Renders" track** (`:2283-2371`). Only a **whole-clip** render
+   auto-applies in place (`:1070-1078`), capturing `originalSourceRef` (`:1199-1200`) so
+   `reset_render_layer` (`:1298`) restores the original. Condition G was redesigned to whole-clip
+   accordingly — as first written it would not have re-imagined the beat at all.
+2. **The 8-second figure is not a cap.** `SA3_SECONDS` (default 8.0) is the initial latent grid;
+   retargeting is RoPE-free and the ceiling is `MOSH_SA3_MAX_CONTIGUOUS = 240 s`
+   (`service/sa3/engine.py:41-42`). At 92.69 s the Beat may render contiguously and seamlessly.
+   Whether it does, or falls back to `coverage: "stitch"` (independent windows crossfaded at 1 ms,
+   `service/clip_coverage.py:51-59`), is **measured, not assumed**. **G is a re-imagination, not
+   a mix** either way.
+3. **The audio path is 44.1 kHz / 16-bit.** `stageWavRegionAt44k` (`:182`) resamples and truncates
+   to 44.1 k/16-bit stereo; a conventional treatment never leaves 48 kHz / 32-bit float. Any blind
+   "G sounds different" is confounded unless that is separated — hence the G-STAGING-NULL output.
 
 ### 5.2 Why RoEx is blocked, narrowly
 
@@ -418,8 +422,8 @@ Nothing below is a defect claim; each is an honest gap.
 |---|---|---|
 | Any musical judgment on Song A | **not run** | Round 1 of the named experiment |
 | RoEx / any specialized automated mixing | **blocked** | A dated owner authorization covering account access and third-party upload |
-| Whether a sub-region SA3 render splices or replaces | **unknown** | The rehearsal brief |
-| Whether `--run-script` can open an existing `.mosh` and drive `batch_begin` | **unknown** | The rehearsal brief |
+| ~~Whether a sub-region SA3 render splices or replaces~~ | **answered from source 2026-09-06** — neither; see §5.1. What remains is whether the whole-clip `reset_render_layer` round-trip restores byte-for-byte | The rehearsal brief |
+| ~~Whether `--run-script` can open an existing `.mosh` and drive `batch_begin`~~ | **closed 2026-09-06** — it can | — |
 | Whether declined utterances write ledger records | **unknown** | The rehearsal brief. Material: this experiment produces declines by design |
 | SA3 wall time / memory for a stitched multi-window region | **not measured** | The rehearsal brief |
 | Provenance of the built binary used for any candidate | **absent** | Recorded in the freeze manifest, or rebuild from the frozen SHA |

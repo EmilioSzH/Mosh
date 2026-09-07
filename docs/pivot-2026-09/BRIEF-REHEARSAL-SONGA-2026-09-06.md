@@ -81,14 +81,22 @@ Read `<sessionDir>/agent-transactions.jsonl` and `__snapshot` after each step. R
 
 ## 3. Half 3 — the SA3 region pre-flight
 
-On the same disposable copy, one `create_render_layer` with an explicit `regionStart` /
-`regionEnd` on the Beat clip, then one `render_layer`. Record:
+**Revised 2026-09-06:** the splice-or-replace question was answered from source before this ran —
+a sub-region render lands as a new clip on a separate track and only a **whole-clip** render
+applies in place, so G was redesigned to whole-clip ([MIX-PACKAGE-V0 §7.5](MIX-PACKAGE-V0.md)).
+What this half now establishes is the narrower, load-bearing thing: **that the whole-clip
+round-trip is reversible.**
 
-- **whether the rendered result splices back into the clip or replaces the clip's source** —
-  compare the clip's duration and offset before and after, and hash the Beat audio **outside**
-  the declared region;
-- wall time and peak memory;
-- `SA3_SECONDS`, `SA3_MLX_DIR` and `MOSH_ENABLE_SA3` as actually resolved at runtime;
+Measure cheaply first — one whole-clip render on a **short disposable clip** — then repeat on a
+copy of the Beat. Record:
+
+- **whether `reset_render_layer` restores the Beat byte-for-byte** (hash before, after render,
+  after reset). This is what the source-preservation promise rests on;
+- whether the render went **contiguous** or fell back to `coverage: "stitch"`, and how many
+  windows if stitched;
+- wall time and peak memory for each;
+- `SA3_SECONDS`, `SA3_MLX_DIR`, `MOSH_SA3_MAX_CONTIGUOUS` and `MOSH_ENABLE_SA3` as actually
+  resolved at runtime, plus whether the local service had to be started separately;
 - the output's sample rate and bit depth at each stage.
 
 ## 4. Frozen decision rule
@@ -100,7 +108,7 @@ Written before the rehearsal runs, so the result cannot be reinterpreted afterwa
 1. every transaction id's last record is terminal across the restart, **and** process 2's batch is
    served;
 2. one `undo` restores the pre-edit values, and they survive save and reopen;
-3. the region render splices back into the clip, leaving the audio outside the region unchanged.
+3. the whole-clip render round-trips — `reset_render_layer` restores the Beat byte-for-byte.
 
 Standing procedure in that case: **one fresh session directory per round**, and inspect the
 ledger after every revision.
@@ -115,10 +123,11 @@ experiment's critical path.
 ledger record, the repair becomes **mandatory** regardless of the other two results — this
 experiment produces declines by design, and every one of them would poison the session.
 
-**If half 2 cannot be written** — if `--run-script` cannot open an existing `.mosh` and drive
-`batch_begin` against it — then the rehearsal has become a project. Stop, report that, and go to
-the experiment with the fresh-session-directory discipline and the risk consciously accepted.
-Do not build engine support to make the rehearsal possible.
+**Half 2 is known to be writable** (established 2026-09-06): `open_project` and `save_as` are
+dispatched natively without the UI-only filter (`MoshOps.cpp:929,931`), and
+`tests/crash-residue-smoke.sh` already drives `open_project` across a two-process restart on one
+kept session directory — copy that pattern. If it nonetheless proves impossible, stop and report;
+do not build engine support to make the rehearsal possible.
 
 ## 5. Stop conditions
 
