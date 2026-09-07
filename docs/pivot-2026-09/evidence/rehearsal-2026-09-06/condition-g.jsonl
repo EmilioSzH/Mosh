@@ -1,0 +1,9 @@
+# Condition G — whole-clip SA3 re-imagination of the Beat only. The vocals are structurally
+# outside the operation. Prompt and seed frozen here BEFORE the render.
+{"command":"open_project","args":{"file":"/Users/emiliosanchez-harris/Library/Mosh/mix-2026-09-songA-first-pass/r1/cond-g/greg.mosh"}}
+{"command":"__wait","args":{"ms":500}}
+{"command":"create_render_layer","args":{"clipId":"1014","adapter":"stable_audio3","mode":"reimagine"}}
+{"command":"set_render_param","args":{"clipId":"1014","prompt":"dark gregorian chant trap beat, deep 808 bass, crisp hi-hats","seed":4242,"nl":0.5,"coverage":"auto"}}
+{"command":"render_layer","args":{"clipId":"1014","wait":true}}
+{"command":"__snapshot","args":{"label":"after_render"}}
+{"command":"export_audio","args":{"file":"/Users/emiliosanchez-harris/Library/Mosh/mix-2026-09-songA-first-pass/r1/COND-G.wav","format":"wav","bitDepth":32,"range":"full","tail":"cut"}}

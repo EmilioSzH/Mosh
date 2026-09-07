@@ -51,7 +51,7 @@ Verified at `0da6c638` (`src/moshops/MoshOps.Clips.cpp` `cmdImportClip`; fixture
 | Target track | Create the track first with `create_track`; without `trackId` the clip lands on the first audio track |
 | No pitch / fade / normalize on import | Yes — none applied |
 | No warp on import | **Only if the file name carries no tempo token.** Verified 2026-09-05: a file named `…_145BPM_…wav` is marked auto-tempo and stretched to the session tempo on import (92.69 s → 112.00 s) and then cannot be rendered headless ("export render stalled"). Rule: rename tempo-tagged exports before import (byte-identical copy; original name + hash in the sidecar). `set_clip_warp {autoTempo:false}` unblocks rendering but keeps the stretched length |
-| Sample-rate mismatch with the session | **Unverified** — match the session rate at export time |
+| Sample-rate mismatch with the session | **Verified 2026-09-06, and worse than "unverified": headless renders CANNOT match a 48 kHz package.** The session rate is the audio device's (`MoshOps.cpp:3171`), `--run-script` forces no-audio, and `export_audio` takes no rate argument — so every headless render of this 48 kHz package is resampled to 44.1 kHz with no way to ask otherwise. Uniform across candidates, so comparisons stay fair, but any headless render evidence about a 48 kHz project has been resampled. See §7.4 |
 | Reference-only / immutable track | **Absent** — use `set_track_mute` plus a `REF-` name prefix and record it in the sidecar |
 | Hashes, roles, consent | Manual (`shasum -a 256` into the sidecar) |
 | Master fader | A fresh session's master sits at **−3 dB** (fixture snapshot `master: -3.0`); set `set_master_volume {db: 0}` before any level-comparison export |
@@ -238,7 +238,38 @@ the owner's measures to seconds with the table above before anything touches the
 
 | Control | Artifact | What it isolates |
 |---|---|---|
-| **CTRL-IMPORT** | a fresh full-song `export_audio` of an untouched copy of `mosh/greg.mosh` (48 kHz, `bitDepth 32`, `range full`) | Any Mosh-side change. Its published baseline is peak −0.98 / RMS −16.29 dBFS (§6); a re-render that disagrees **stops the run** |
+| **CTRL-IMPORT** | a fresh full-song `export_audio` of an untouched copy of `mosh/greg.mosh` (`bitDepth 32`, `range full`) | Any Mosh-side change. Baseline restated for 44.1 kHz below; a re-render that disagrees **stops the run** |
+
+**Every headless render is 44.1 kHz, and that is not optional — measured 2026-09-06.** The
+session's rate is the audio *device's* rate (`MoshOps.cpp:3171`), `--run-script` forces no-audio
+(so `audioReady` is false and the device manager reports its 44100 default even when audio is not
+disabled by env), and `export_audio` has **no** sample-rate parameter. So a 48 kHz package is
+silently resampled to 44.1 kHz on every headless render, and there is no way to ask for 48.
+
+This is why a re-render of CTRL-IMPORT does **not** reproduce §6's published peak. Measured with
+a method first validated against a known file — the rough measures −1.44 / −16.26 here against
+§6's published −1.46 / −16.22, agreeing to 0.04 dB:
+
+| | Peak | RMS | Integrated |
+|---|---|---|---|
+| §6 baseline (48 kHz, device-backed run) | −0.98 dBFS | −16.29 dBFS | — |
+| 2026-09-06 headless re-render (44.1 kHz) | **+0.02 dBFS** | **−16.34 dBFS** | −13.50 LUFS |
+
+**The content is the same; the resample moved the peak.** RMS agrees to 0.05 dB — the same
+tolerance the validated method shows on the rough — while the peak rises 1.0 dB because
+resampling turns intersample peaks into real ones. Nothing about the mix changed.
+
+Consequences, all frozen before any candidate is heard:
+
+1. **The round-1 integrity gate is the 44.1 kHz figures above**, not §6's. A re-render that
+   disagrees with *these* stops the run.
+2. **Every candidate renders at 44.1 kHz**, so the resample is common to all four and cancels out
+   of the comparison.
+3. **G-STAGING-NULL now isolates one variable, not two.** SA3 stages at 44.1 kHz / 16-bit; since
+   everything is already 44.1 kHz, the null isolates exactly the 16-bit truncation. Cleaner than
+   designed.
+4. **CTRL-OWNER is 48 kHz** and is resampled to 44.1 with the same single ffmpeg invocation used
+   for every other file, so no candidate gets a conversion the others did not.
 | **CTRL-OWNER** | `source/greg.wav`, the owner's own master chain | End-to-end usefulness. This is the comparison amendment clause 2 names |
 
 **CTRL-OWNER is a listening reference only and must never be a null-test partner.** It is a
@@ -286,13 +317,16 @@ means**: there is no declared sub-region to preserve outside of, and the honest 
 source preservation via `originalSourceRef` plus a proven `reset_render_layer` round-trip.
 §7.8's region row stays **unverified until the rehearsal demonstrates that round-trip**.
 
-**The 8-second figure was wrong as a cap.** `SA3_SECONDS` (default 8.0) is the *initial latent
-grid*; per-clip retargeting is RoPE-free and the real ceiling is `MOSH_SA3_MAX_CONTIGUOUS = 240 s`
-(`service/sa3/engine.py:41-42`). The Beat is 92.69 s, comfortably under it, so a **contiguous,
-seamless** render may well be what happens. Whether this render goes contiguous or falls back to
-`coverage: "stitch"` (independent windows crossfaded at 1 ms, `service/clip_coverage.py:51-59`) is
-**measured by the rehearsal and recorded**, not asserted here. **G is a re-imagination, not a
-mix** either way.
+**The 8-second figure was wrong as a cap, and the seams do not exist. Measured 2026-09-06.**
+`SA3_SECONDS` (default 8.0) is the *initial latent grid*; retargeting is RoPE-free and the real
+ceiling is `MOSH_SA3_MAX_CONTIGUOUS = 240 s` (`service/sa3/engine.py:41-42`). A whole-clip render
+of the real 92.6896875 s Beat returns `coverage: "single"` — **one contiguous window, no
+stitching, no crossfades, no seams** — in **22 s wall**, including app startup
+([evidence](evidence/rehearsal-2026-09-06/SA3-PREFLIGHT.md)).
+
+So the earlier caveat that "G's seams are a property of the method" is **withdrawn for this
+song**: there are none. The only pipeline artefact left is the 44.1 kHz / 16-bit staging, which
+**G-STAGING-NULL** isolates. **G is still a re-imagination, not a mix** — that part stands.
 
 ### 7.6 Reverb on Song A — what the control actually is
 
@@ -479,6 +513,8 @@ satisfies Rule 1: one real mix action corrected, with a rating and a lesson.
 | **Second reverb added** — the loop calls `load_builtin reverb`, not knowing the existing one is printed | Frozen: the revision arm and G may not call `load_builtin`. Detect by diffing the plugin inventory in the saved `.mosh` — 1 `volume` + 7 `level`, plus only C's declared inserts |
 | **Loudness confound** | §7.9 step 2 |
 | **G staging confound** | G-STAGING-NULL, §7.5 |
+| **A candidate is attributed to the wrong backend.** `render_layer` returns `{"cache":"miss","status":"ready"}` and names no backend; `~/Library/Mosh/logs/service.log` is shared across worktrees, so its tail describes other people's services, not your job. Chasing those two during the 2026-09-06 pre-flight produced a confidently wrong "this is a fake render" conclusion that had to be retracted | **Every generative candidate carries its own `renders/<layerId>/output_manifest.json`**, whose `adapter` field is the only authoritative record of what produced it. Also record `coverage` (`single` = contiguous, `stitch` = seams) and the seed. To tell determinism from a passthrough, change **one** input — the seed — and confirm the audio changes. See [evidence/rehearsal-2026-09-06/SA3-PREFLIGHT.md](evidence/rehearsal-2026-09-06/SA3-PREFLIGHT.md) |
+| **A render's quality score leaks into selection.** Every manifest carries `pq`, `pq_base`, axes `{CE, CU, PC, PQ}` and a `reasoning` string | Amendment clause 6: **no score may rank, filter, select or suppress a candidate before the owner has heard it.** Recording it in the manifest is fine; nothing in the experiment may read it, and the listening page must never surface it |
 | **Master at −3 dB** — a fresh session default makes a whole condition arrive quiet and read as "smaller" | Before every render, assert the master `volume` literal in the copy (`0.740818202495575` = 0 dB) |
 | **Auto-tempo stretch** — any file whose name carries a BPM token is stretched on import (§4) | No file this experiment creates carries a `<digits>BPM` token; after every round assert `autoTempo` false and every clip length 92.6896875 s |
 | **Double undo from an idempotent replay** | §7.7, recovery check |
