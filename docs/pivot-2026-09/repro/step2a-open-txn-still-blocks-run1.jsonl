@@ -1,0 +1,8 @@
+# Regression guard, run 1 of 2 — leave a genuinely AMBIGUOUS transaction: `open`, never
+# resolved. The script simply ends after batch_begin, so the only record for T-open is its
+# begin line. This is the case the block exists for and it MUST still block.
+{"command":"create_track","args":{"name":"Vocal"},"capture":{"V":"trackId"}}
+{"command":"add_test_tone_clip","args":{"trackId":"${V}","seconds":2.0,"freq":220.0}}
+{"command":"__wait","args":{"ms":300}}
+{"command":"batch_begin","args":{"transactionId":"T-open","name":"regression open","commands":[{"index":0,"requestId":"r0","command":"set_track_volume"}]}}
+{"command":"save","args":{}}

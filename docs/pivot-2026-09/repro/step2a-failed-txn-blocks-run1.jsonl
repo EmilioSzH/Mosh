@@ -1,0 +1,33 @@
+# Step-2 item A, RUN 1 of 2 — leave a FAILED transaction behind and exit CLEANLY.
+#
+# The point of this fixture is that nothing here crashes. A manifested command is refused
+# (a bad trackId returns errResult before beginTxn, MoshOps.Tracks.cpp), so the entry fails,
+# the transaction is recorded `failed` (MoshOps.cpp, appendTxnLedger on command failure), and
+# the process then exits normally. Before the fix that was enough to refuse every transactional
+# skill batch, forever, in this session directory.
+#
+# Run BOTH files against the SAME session directory, in order:
+#   S=_harness/step2a-$$
+#   for f in run1 run2; do
+#     MOSH_NO_AUDIO=1 MOSH_RUNSCRIPT_KEEP_SESSION=1 MOSH_SELFTEST_SESSION=$S \
+#     MOSH_RUN_SCRIPT=docs/pivot-2026-09/repro/step2a-failed-txn-blocks-$f.jsonl \
+#     MOSH_RUN_SCRIPT_OUT=$OUT/$f.jsonl <Mosh binary> --run-script
+#   done
+# MOSH_SELFTEST_SESSION must stay a RELATIVE _harness/<leaf> path or it is silently redirected.
+#
+# Expected exit codes (verified 2026-09-06 against the repaired binary): run1 exits 3 — the
+# refused command plus the batch_end and snapshot that follow it — and that is the POINT of
+# this run, not a problem. run2 exits 0. Before the fix run2 exited 3.
+{"command":"create_track","args":{"name":"Vocal"},"capture":{"V":"trackId"}}
+{"command":"add_test_tone_clip","args":{"trackId":"${V}","seconds":2.0,"freq":220.0}}
+# Pump once: track creation arms the engine's deferred TrackList sort, which is written
+# through the UndoManager on the first message pump (2026-09-05 finding).
+{"command":"__wait","args":{"ms":300}}
+{"command":"__snapshot","args":{"label":"base"}}
+# A transaction whose single manifested command is REFUSED. Not a crash — the ordinary path
+# when a command cannot run.
+{"command":"batch_begin","args":{"transactionId":"T-fail","name":"repro fail","commands":[{"index":0,"requestId":"r0","command":"set_track_volume"}]}}
+{"command":"set_track_volume","args":{"trackId":"999999","db":-2.0},"transaction":{"transactionId":"T-fail","requestId":"r0","index":0}}
+{"command":"batch_end","args":{"transactionId":"T-fail"}}
+{"command":"__snapshot","args":{"label":"after_fail"}}
+{"command":"save","args":{}}
