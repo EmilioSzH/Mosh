@@ -190,34 +190,49 @@ ffprobe -v error -f lavfi -i "amovie='<file>',asetnsamples=n=2400:p=0,astats=met
 | Double vocal | 6.950–26.900 · 29.200–29.750 · 40.100–46.600 · 66.550–86.250 | at or above −50 dBFS |
 | **Background vocal** | **19.800–25.950 s only** | at or above −55 dBFS |
 
-The three drum entries are spaced 39.700 s and 39.750 s. At 24 bars per block that is
-**1.6552 s per bar ≈ 145.0 BPM, anchored at t₀ ≈ 5.20 s** — measured twice, independently,
-agreeing to 50 ms. Recorded as corroboration only; nothing below depends on it.
+The three drum entries are spaced 39.700 s and 39.750 s; 24 bars at 145 BPM is 39.724 s. So the
+beat runs in **24-bar blocks**, and the file name's `145BPM` token is corroborated by the audio
+rather than trusted.
 
-**Frozen excerpts:**
+**The owner named the hook (2026-09-06): measures 5–17 and 41–53.** Counting bar 1 at t = 0 in
+4/4 at 145 BPM (one bar = 1.655172 s), those downbeats fall at 6.621 / 26.483 / 66.207 / 86.069 s
+— and every one lands within half a second of a **measured** double-vocal edge:
 
-- **E1 (primary) = 14.100 → 39.750 s** (25.65 s). Both boundaries sit in verified three-way
-  silence: at 14.100 the lead is in its measured 13.950–14.400 gap and the double is at −inf
-  from 13.250; at 39.750 the drums stop, the lead has been silent since 39.200 and the double
-  since 29.750. E1 contains the full-band beat, lead + double, **the only three-layer vocal
-  window in the song** (19.800–25.950), the double's exit at 26.900, and a lead-only stretch to
-  39.200. That dense-passage-versus-sparse-passage contrast inside one excerpt is what makes it
-  the right range for revision 1.
-- **E2 (confirm) = 63.150 → 79.600 s** (16.45 s). Starts in a lead gap (63.000–63.300) while the
-  double is silent (46.600–66.550); covers the second doubled passage from its 66.550 entry and
-  the block-2 drum drop-out at 79.450; ends in three-way silence.
+| His measure | Downbeat | Measured double-vocal edge | Offset |
+|---|---|---|---|
+| bar 5 (hook 1 in) | 6.621 s | 6.950 s | +0.329 s |
+| bar 17 (hook 1 out) | 26.483 s | 26.900 s | +0.417 s |
+| bar 41 (hook 2 in) | 66.207 s | 66.550 s | +0.343 s |
+| bar 53 (hook 2 out) | 86.069 s | 86.250 s | +0.181 s |
+
+All four offsets are small and positive — exactly what a vocal entering just after the bar line
+looks like through a 50 ms envelope. **The hook is the two doubled-vocal passages**, confirmed
+independently of anyone's say-so. This also fixes the bar-to-second mapping for the whole song,
+so his measure numbers and these measurements are now the same coordinate system.
+
+**Frozen excerpts** — both revised 2026-09-06 to contain a hook *whole*. (The earlier
+E1 of 14.100–39.750 s began at bar ≈9.5, a third of the way inside hook 1, which would have made
+"the vocal gets lost in the hook" untestable.)
+
+- **E1 (primary) = 6.000 → 39.750 s** (33.750 s). Contains **hook 1 entire** (bars 5–17), the
+  only three-layer vocal window in the song (19.800–25.950), the double's exit at 26.900, and the
+  sparse lead-only stretch to 39.200 — so the dense hook and the thin passage after it are inside
+  one excerpt, which is what makes "forward, without making the beat feel smaller" judgeable.
+  Both boundaries are verified three-way silent: at 6.000 the lead is in its 5.850–6.150 gap, the
+  double has not entered, the background never has; at 39.750 the drums stop, the lead has been
+  silent since 39.200 and the double since 29.750.
+- **E2 (confirm) = 63.150 → 86.500 s** (23.350 s). Contains **hook 2 entire** (bars 41–53), the
+  block-2 drum drop-out at 79.450 and the re-entry at 84.650. Boundaries verified three-way
+  silent: 63.150 sits in a lead gap while the double is silent from 46.600; by 86.500 every vocal
+  has stopped.
 - **The whole song is always auditioned before final acceptance.** E1/E2 are for the A/B; the
   whole song is for the keep decision.
 
-**Two rules that follow from the material:**
-
-1. **Every time is in seconds. Never bars.** The session tempo is `120.0` BPM while the audio's
-   own grid is ~145. The transport's bar ruler is not the song's bars — do not say "bar 12" to
-   Moshi or to the owner on this project.
-2. **The owner names the hook.** Which of E1 and E2 is "the hook" is his word, given in one
-   sentence before V1 is selected and recorded verbatim. The background layer occurs exactly
-   once in the song, which is not how a repeating chorus behaves, so the label is not inferable
-   from the audio. Revision 1's wording must point at a range both parties named.
+**The rule about bars, restated precisely.** There are two grids and only one of them is real
+music. The **owner's** measures are bar 1 at t = 0, 145 BPM — the mapping above — and those are
+safe to speak in with him. The **Mosh session's** transport ruler reads `120.0` BPM and is
+meaningless here. So: never quote a Mosh bar number, never ask Moshi to act on one, and convert
+the owner's measures to seconds with the table above before anything touches the engine.
 
 ### 7.4 The two controls
 
@@ -263,11 +278,10 @@ re-imagination, not a mix**; its seams are a property of the method, not a defec
 
 ### 7.6 Reverb on Song A — what the control actually is
 
-**Owner ruling D1** ([RECONCILIATION §1.1](RECONCILIATION-2026-09-06.md), chat 2026-09-06,
-`reported` — a structural claim about his own Ableton session that no file here can corroborate):
-the printed `FX A-Reverb` and `FX B-Delay` tracks *are the bounced output of the sends*. Their
-faders are the reverb and delay amount. **Confirm this explicitly before revision 2 relies on
-it**; if those tracks turn out to be something else, revision 2's target changes.
+**Owner ruling D1, confirmed 2026-09-06** ([RECONCILIATION §1.1](RECONCILIATION-2026-09-06.md)):
+the printed `FX A-Reverb` and `FX B-Delay` tracks *are the bounced output of the sends*. Stated
+once and then re-confirmed on request, so revision 2 may rely on it. Their faders are the reverb
+and delay amount.
 
 `greg.mosh` contains **zero** `AUXSEND` / `AUXRETURN` nodes — 7 `level` plugins and one master
 `volume`. So on this project:
@@ -296,7 +310,8 @@ offset applied. Preferring CTRL-IMPORT or CTRL-OWNER is a **legitimate, informat
 only as a rescue target, the sequence is labelled **directed recovery**, not first-pass success.
 
 **Revision 1 — "The vocal gets lost in the hook. Bring it forward without making the beat feel
-smaller."**
+smaller."** "The hook" now denotes a range both parties have named: bars 5–17 inside E1, and
+bars 41–53 inside E2 (§7.3). The judgment is made on E1.
 
 - *Predicted:* no match. Two sentences, no dB figure; `matchExplicitBalanceUtteranceV1` returns
   null and the turn falls to the router and the loop. His natural word "the vocal" also matches
@@ -382,7 +397,8 @@ source separation.
 1. Every condition and CTRL-IMPORT renders **full song, once**. E1 and E2 are then cut from those
    renders with a **single identical ffmpeg command per excerpt** applied to every file, so
    alignment is bit-exact across conditions, with an identical 10 ms fade at both edges:
-   `-af "atrim=start=14.1:end=39.75,asetpts=PTS-STARTPTS,afade=t=in:d=0.01,afade=t=out:st=25.64:d=0.01"`.
+   `-af "atrim=start=6.0:end=39.75,asetpts=PTS-STARTPTS,afade=t=in:d=0.01,afade=t=out:st=33.74:d=0.01"`
+   for E1, and `atrim=start=63.15:end=86.5` with `afade=t=out:st=23.34` for E2.
    (`asetpts` matters — without it `atrim` leaves the original timestamps.)
 2. **Loudness match.** Measure integrated loudness with
    `ffmpeg -i <clip> -af ebur128=peak=true:framelog=quiet -f null -`. **The reference is fixed in
@@ -420,7 +436,7 @@ the evidence record. No silent re-rolls, no unreported rescues.
 python3 scripts/produce/capture-correction.py \
   --run greg-r1-C --rating pass_with_notes --verdict "<his one sentence>" \
   --note "lane: mix" --note "experiment: mix-2026-09-songA-first-pass round 1" \
-  --note "song: greg" --note "section: E1 14.100-39.750 s" --note "condition: C" \
+  --note "song: greg" --note "section: E1 6.000-39.750 s (hook 1, bars 5-17)" --note "condition: C" \
   --note "blind label: B" --note "level-match: -1.3 dB (ref CTRL-IMPORT, residual 0.05 LU)" \
   --note "q1 helped: yes / q2 protected: yes / q3 keep: yes"
 ~~~
@@ -464,6 +480,6 @@ satisfies Rule 1: one real mix action corrected, with a rating and a lesson.
 | Whether `--run-script` can open an existing `.mosh` and drive `batch_begin` against it | Both existing fixtures build projects from scratch; decides whether the rehearsal is possible at all | the rehearsal |
 | SA3 wall time and memory for a stitched multi-window region; `SA3_SECONDS` as actually installed | Sets whether G fits the unattended target and whether 4 outputs are affordable | the rehearsal |
 | Provenance of the built binary | §7.2 | the freeze manifest |
-| Which of E1 and E2 is "the hook" | Revision 1 must point at a range both parties named | one sentence from the owner |
-| Whether the printed FX tracks really are the bounced send returns (ruling D1) | Revision 2's whole target rests on it, and nothing in this repository can corroborate a claim about his Ableton session | owner confirmation, before revision 2 |
+| ~~Which range is "the hook"~~ | — | **CLOSED 2026-09-06**: bars 5–17 and 41–53, corroborated against the measured double-vocal edges (§7.3). Both are now contained whole, in E1 and E2 respectively |
+| ~~Whether the printed FX tracks are the bounced send returns~~ | — | **CLOSED 2026-09-06**: confirmed by the owner on request (§7.6) |
 | Whether this experiment or the existing step-4-early probe is named first, and whether they share one counter | Both draw on the same listening budget and cap | owner decision (conflict C3) |

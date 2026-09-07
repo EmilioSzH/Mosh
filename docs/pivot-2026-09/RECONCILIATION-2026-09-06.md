@@ -52,18 +52,33 @@ any artifact.
 | **D1** | Song A's reverb is printed into separate audio tracks — there are no sends in the project. How should the experiment handle "a little less reverb"? | *"those printed reverbs are the bounced output of the sends"* | [MIX-PACKAGE-V0 §7.6](MIX-PACKAGE-V0.md) |
 | **D2** | Condition A (specialized automated mixing, RoEx) needs a vendor account and uploading your unreleased song to a third party. How should I record it? | *Drop A from round 1* | §5.2 below |
 | **D3** | A failed skill transaction can latch the session ledger and silently kill Moshi's deterministic lane. What runs first? | *Headless rehearsal decides* | §7 below |
+| **D4** | Which listening range is "the hook"? | *"hook is measures 5-17 and 41-53"* — and, re-confirming D1, *"FX tracks really are the bounced"* | [MIX-PACKAGE-V0 §7.3](MIX-PACKAGE-V0.md) |
 
-**D1 carries the most weight and the least corroboration.** It is a structural claim about the
-owner's own Ableton session — that the printed `FX A-Reverb` / `FX B-Delay` tracks are the
-bounced output of return sends — which no file in this repository can confirm; what *is* verified
-here is only the consequence, that `greg.mosh` contains no send buses. **Before revision 2 of the
-experiment relies on D1, confirm it explicitly.** If it turns out those tracks are something else
-(a parallel bus print, a stem with other processing), revision 2's target changes and this
-section is the place to correct it.
+**D1 was re-confirmed on request, 2026-09-06**, after an independent review flagged it as the one
+claim carrying weight without corroboration. It is a structural fact about the owner's own
+Ableton session — that the printed `FX A-Reverb` / `FX B-Delay` tracks are the bounced output of
+return sends — which no file in this repository can independently verify; what *is* verified here
+is only its consequence, that `greg.mosh` contains no send buses. Asked a second time and
+answered the same way, it is settled enough for revision 2 to rely on. If it later proves
+otherwise, revision 2's target changes and this section is where to correct it.
 
 D2 is close to a mechanical entailment of handoff §3.2, which already bars uploads and account
 creation; the owner's answer settles the remaining question of whether to wait for A rather than
 proceed without it.
+
+**D4 — the hook (2026-09-06): "measures 5-17 and 41-53".** Unlike D1, this one is
+**corroborated by the audio**. Counting bar 1 at t = 0 in 4/4 at 145 BPM, those four downbeats
+fall at 6.621 / 26.483 / 66.207 / 86.069 s, and each lands 0.18–0.42 s before a *measured*
+double-vocal edge (6.950 / 26.900 / 66.550 / 86.250 s) — every offset small and positive, which
+is what a vocal entering just after the bar line looks like through a 50 ms envelope. So the hook
+is the two doubled-vocal passages, and the owner's measure numbering and this pass's
+measurements are now the same coordinate system.
+
+It also **corrected the frozen spec**: the earlier E1 of 14.100–39.750 s began at bar ≈9.5, a
+third of the way inside hook 1, which would have made "the vocal gets lost in the hook"
+untestable. E1 and E2 were re-derived to contain a hook whole
+([MIX-PACKAGE-V0 §7.3](MIX-PACKAGE-V0.md)) — the freeze earning its keep before a single
+candidate existed.
 
 ---
 
@@ -411,8 +426,8 @@ Nothing below is a defect claim; each is an honest gap.
 | The measured recording-recovery contract | **absent** | Step 3's real crash test |
 | F6, F4's second half, the unattributed SIGSEGV | **absent** | Step 2 |
 | Whether Cmd+Shift+F is a blocked surface under clause 4 | **owner's call** | One runtime check plus his classification |
-| Which listening range is "the hook" | **owner's call** | One sentence, before V1 is selected |
-| Whether the printed FX tracks really are the bounced send returns (D1) | **reported, not corroborated** | Owner confirmation, before revision 2 relies on it |
+| ~~Which listening range is "the hook"~~ | **closed 2026-09-06** — bars 5–17 and 41–53 (D4) | — |
+| ~~Whether the printed FX tracks are the bounced send returns~~ | **closed 2026-09-06** — confirmed (D1) | — |
 | C3: which experiment is named first, and one counter or two | **owner's call** | — |
 
 ---
